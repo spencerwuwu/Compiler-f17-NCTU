@@ -1,0 +1,17 @@
+Project3 symbol table - Examples release
+
+- Examples : example of test code
+
+- Answers : Relevant answer output of Examples
+
+-------------------------------------------------------------------------------
+
+1. In this project, we only test symbol table dump and a sematic error: <Redeclaration>.
+
+    The only error msg: "<Error> found in Line n: symbol x is redeclared"
+
+2. About array type evaluation, the size of array and indexs are always positive integers.
+
+3. Error msg and symbol table format should be identical, you can find them in spec.
+
+4. Output order of symtab is not mandatory but expexted being the same.
