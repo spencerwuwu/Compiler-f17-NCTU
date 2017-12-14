@@ -15,6 +15,7 @@ extern int func_scope;
 extern int yylex(void);
 int yyerror(char* );
 
+char fileName[256];
 
 int func_attr_flag = 0;
 
@@ -513,7 +514,88 @@ int string_to_oct(char* input) {
 	return ans;
 }
 
+// p4 new functions
+Type_node* look_up_id_type(char *id) {
+	Symbol_node *sp;
+	sp = current_stack->Variable_list->head;
+	Type_node *object;
+	object = malloc(sizeof(Type_node));
+	int find_flag = 0;
+	int break_flag = 0;
+	if (sp != 0) {
+		while (sp->next != 0 && !break_flag) {
+			if (strcmp(id, sp->name) == 0) {
+				find_flag = 1;
+				break_flag = 1;
+				object->emptyness = 0;
+				strcpy(object->type, sp->type);
+				break;
+			}
+		}
+	}
+	if (!break_flag) {
+		if (strcmp(id, sp->name) == 0) {
+			find_flag = 1;
+			object->emptyness = 0;
+			strcpy(object->type, sp->type);
+		}
+	}
+	if (!find_flag) {
+		object->emptyness = 1;
+		strcpy(object->type, "");
+	}
+	return object;
+}
 
+Type_node* choose_type(Type_node *a, Type_node *b) {
+	Type_node *ans;
+	ans = malloc(sizeof(Type_node));
+	int empty_flag = 1;
+	if (!a->emptyness && !b->emptyness) {
+		if (strcmp(a->type,"real") == 0) {
+			if (strcmp(b->type,"string") != 0 && strcmp(b->type,"boolean") != 0) {
+				strcpy(ans->type, "real");
+				ans->emptyness = 0;
+				empty_flag = 0;
+			}
+		}
+		else if (strcmp(a->type,"integer") == 0) {
+			if (strcmp(b->type,"string") != 0 && strcmp(b->type,"boolean") != 0) {
+				strcpy(ans->type, "real");
+				ans->emptyness = 0;
+				empty_flag = 0;
+			}
+		}
+		else if (strcmp(a->type,"string") == 0) {
+			if (strcmp(b->type,"string") == 0) {
+				strcpy(ans->type, "string");
+				ans->emptyness = 0;
+				empty_flag = 0;
+			}
+		}
+		else if (strcmp(a->type,"boolean") == 0) {
+			if (strcmp(b->type,"boolean") == 0) {
+				strcpy(ans->type, "boolean");
+				ans->emptyness = 0;
+				empty_flag = 0;
+			}
+		}
+	}
+	if (empty_flag) {
+		strcpy(ans->type, "");
+		ans->emptyness = 1;
+	}
+	return ans;
+}
+
+// Other global varaibles
+char programName[256];
+char funcName[256];
+char funcType[256];
+int funcInner_flag = 0;
+
+char idType[100];
+int for_param[2];
 
 %}
 
@@ -524,7 +606,7 @@ int string_to_oct(char* input) {
 	struct symbol_node	*symb;
 	struct id_node		*iden; 
 	struct array_list	*arr;
-
+	struct type_node    *var_type;
 }
 /* tokens */
 %token ARRAY
@@ -593,6 +675,15 @@ int string_to_oct(char* input) {
 %type <double_val> d_literal_const
 %type <str> decl
 
+%type <var_type> boolean_expr
+%type <var_type> boolean_term
+%type <var_type> boolean_factor
+%type <var_type> factor
+%type <var_type> term
+%type <var_type> expr
+%type <var_type> relop_expr
+%type <var_type> var_ref
+
 /* start symbol */
 %start program
 %%
@@ -608,6 +699,10 @@ program			: ID
 					for_list = new_for_list();
 
 					global_push_back($1, "void", "program", "");
+                    strcpy(programName, $1);
+					if (strcmp(programName, fileName) != 0) {
+						printf("<Error> found in Line %d: program beginning ID inconsist with file name\n", linenum);
+					}
 				} 
 				MK_SEMICOLON
 			  	program_body
@@ -615,6 +710,12 @@ program			: ID
 				{	
 					current_level--;
 					scope_stack_pop();	
+					if (strcmp($6, programName) != 0) {
+						printf("<Error> found in Line %d: program end ID inconsist with the beginning ID\n", linenum);
+					}
+					if (strcmp($6, fileName) != 0) {
+						printf("<Error> found in Line %d: program beginning ID inconsist with file name\n", linenum);
+					}
 				}
 			;
 
@@ -721,6 +822,8 @@ func_decl	: ID
 				current_func = new_func();
 				func_set_name($1);
 				func_attr_flag = 1;
+                funcInner_flag = 1;
+                strcpy(funcName, $1);
 			}
 		  	MK_LPAREN opt_param_list MK_RPAREN opt_type MK_SEMICOLON
 			{
@@ -734,6 +837,12 @@ func_decl	: ID
 				scope_stack_pop();
 			}
 		  	END ID
+            {
+                funcInner_flag = 0;
+                if (strcmp($14, funcName) != 0) {
+					printf( "<Error> found in Line %d: function beginning ID inconsist with end ID\n", linenum);
+                }
+            }
 		;
 
 function_body	: opt_decl_list
@@ -785,10 +894,17 @@ id_list		: id_list MK_COMMA ID
 			}
 			;
 
-opt_type	: MK_COLON type 
+opt_type	: MK_COLON scalar_type 
 		 	{ 
 				$$ = $2; 
 				func_set_type($2);
+                strcpy(funcType, $2);
+			}
+            | MK_COLON sort_array_type
+		 	{ 
+				$$ = $2; 
+				func_set_type($2);
+				printf("<Error> found in Line %d: function declaration can only be a scalar type\n", linenum);
 			}
 			| /* epsilon */
 		;
@@ -847,9 +963,9 @@ stmt_list		: stmt_list stmt
 			| stmt
 			;
 
-simple_stmt		: var_ref OP_ASSIGN boolean_expr MK_SEMICOLON
-			| PRINT boolean_expr MK_SEMICOLON
-			| READ boolean_expr MK_SEMICOLON
+simple_stmt		:var_ref OP_ASSIGN boolean_expr MK_SEMICOLON
+                | PRINT boolean_expr MK_SEMICOLON
+                | READ boolean_expr MK_SEMICOLON
 			;
 
 proc_call_stmt		: ID MK_LPAREN opt_boolean_expr_list MK_RPAREN MK_SEMICOLON
@@ -872,7 +988,17 @@ for_stmt		: FOR ID
 				{
 					for_it_push($2);
 				}
-		  		OP_ASSIGN int_const TO int_const DO
+		  		OP_ASSIGN int_const TO int_const DO 
+                {
+                    for_param[0] = $5;
+                    for_param[1] = $7;
+                    if (for_param[0] < 0 || for_param[1] < 0) {
+					    printf( "<Error> found in Line %d: The loop parameters used to compute an iteration count must be greater than or equal to zero.\n", linenum);
+                    }
+                    if (for_param[0] > for_param[1]) {
+					    printf( "<Error> found in Line %d: The loop parameters used to compute an iteration count must be in the incremental order.\n", linenum);
+                    }
+                }
 				opt_stmt_list
 				END DO
 				{
@@ -891,20 +1017,28 @@ boolean_expr_list	: boolean_expr_list MK_COMMA boolean_expr
 			| boolean_expr
 			;
 
-boolean_expr		: boolean_expr OP_OR boolean_term
-			| boolean_term
+boolean_expr	: boolean_expr OP_OR boolean_term
+		 		{ $$ = choose_type($1, $3); }
+				| boolean_term
+				{ $$ = $1; }
 			;
 
-boolean_term		: boolean_term OP_AND boolean_factor
-			| boolean_factor
+boolean_term	: boolean_term OP_AND boolean_factor
+		 		{ $$ = choose_type($1, $3); }
+				| boolean_factor
+				{ $$ = $1; }
 			;
 
-boolean_factor		: OP_NOT boolean_factor 
-			| relop_expr
+boolean_factor	: OP_NOT boolean_factor 
+				{ $$ = $2; }
+				|  relop_expr
+				{ $$ = $1; }
 			;
 
 relop_expr		: expr rel_op expr
-			| expr
+		 	{ $$ = choose_type($1, $3); }
+			|  expr
+		 	{ $$ = $1; }
 			;
 
 rel_op			: OP_LT
@@ -915,40 +1049,90 @@ rel_op			: OP_LT
 			| OP_NE
 			;
 
-expr			: expr add_op term
+expr		: expr add_op term
+		 	{ $$ = choose_type($1, $3); }
 			| term
-			;
+		 	{ $$ = $1; }
+		;
 
-add_op			: OP_ADD
+add_op		: OP_ADD
 			| OP_SUB
-			;
+		;
 
-term			: term mul_op factor
+term		: term mul_op factor
+		 	{ $$ = choose_type($1, $3); }
 			| factor
-			;
+		 	{ $$ = $1; }
+		;
 
 mul_op			: OP_MUL
 			| OP_DIV
 			| OP_MOD
 			;
 
-factor			: var_ref
-			| OP_SUB var_ref
+factor		: var_ref	
+		 	{ $$ = $1; }
+			| OP_SUB var_ref	
+		 	{ $$ = $2; }
 			| MK_LPAREN boolean_expr MK_RPAREN
+		 	{ 
+				Type_node* tmp; 
+				tmp = malloc(sizeof(Type_node));
+				tmp->emptyness = 0;
+				strcpy(tmp->type, "string");
+				$$ = tmp;
+			}
 			| OP_SUB MK_LPAREN boolean_expr MK_RPAREN
+		 	{ 
+				Type_node* tmp; 
+				tmp = malloc(sizeof(Type_node));
+				tmp->emptyness = 0;
+				strcpy(tmp->type, "string");
+				$$ = tmp;
+			}
 			| ID MK_LPAREN opt_boolean_expr_list MK_RPAREN
+		 	{ $$ = look_up_id_type($1); }
 			| OP_SUB ID MK_LPAREN opt_boolean_expr_list MK_RPAREN
+		 	{ $$ = look_up_id_type($2); }
 			| int_literal_const
+		 	{ 
+				Type_node* tmp; 
+				tmp = malloc(sizeof(Type_node));
+				tmp->emptyness = 0;
+				strcpy(tmp->type, "string");
+				$$ = tmp;
+			}
 			| d_literal_const
+		 	{ 
+				Type_node* tmp; 
+				tmp = malloc(sizeof(Type_node));
+				tmp->emptyness = 0;
+				strcpy(tmp->type, "string");
+				$$ = tmp;
+			}
 			| str_literal_const
-			;
+		 	{ 
+				Type_node* tmp; 
+				tmp = malloc(sizeof(Type_node));
+				tmp->emptyness = 0;
+				strcpy(tmp->type, "string");
+				$$ = tmp;
+			}
+		;
 
-var_ref			: ID
+var_ref		: ID
+		 	{
+				printf("gg %s\n", $1);
+				$$ = look_up_id_type($1);
+			}
 			| var_ref dim
-			;
+		 	{
+				$$ = $1;
+			}
+		;
 
 dim			: MK_LB boolean_expr MK_RB
-			;
+		;
 
 %%
 
