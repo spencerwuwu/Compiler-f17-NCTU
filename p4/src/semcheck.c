@@ -449,3 +449,165 @@ void deleteIdList( struct idNode_sem *idlist )
 	}
 }
 
+void checkExpr_sem( struct SymTable *table, struct expr_sem *var, struct expr_sem *stmt, int scope) {
+    char *var_name[200];
+    SEMTYPE var_type, stmt_type;
+    __BOOLEAN no_error = __TRUE;
+    strcpy(var_name, var->varRef->id);
+    if( verifyVarDeclaration(table, var_name, scope) ) {
+        var_type = getDeclarationType( table, var_name, scope );
+    }
+    else {
+        no_error = __FALSE;
+    }
+    
+    if( stmt->varRef != 0) {
+        if( verifyVarDeclaration(table, var_name, scope) ) {
+            var_type = getDeclarationType( table, var_name, scope );
+        }
+    }
+    else {
+        stmt_type = stmt->pType->type;
+    }
+
+    __BOOLEAN result = __FALSE;
+    if( var_type == REAL_t) {
+        if (stmt_type == REAL_t || stmt_type == INTEGER_t) {
+            result = __TRUE;
+        }
+    }
+    else {
+        if( var_type == stmt_type ) {
+            result = __TRUE;
+        }
+    }
+
+    if( no_error && result == __FALSE) {
+	    printf("<Error> found in Line %d: type mismatch, LHS= %s, RHS= %s\n", linenum, getTypeString(var_type), getTypeString(stmt_type));
+    }
+
+}
+
+__BOOLEAN verifyVarDeclaration( struct SymTable *table, const char *str, int scope )
+{
+	__BOOLEAN result = __TRUE;
+    struct SymNode* node;
+	// first check loop variable(s)
+	if( lookupLoopVar( table, str ) != 0 ) {
+		result = __TRUE;
+	}
+	else {	// then check normal variable(s)
+		if( (node = lookupSymbOrFunc( table, str, scope )) == 0 ) {	// only search current scope
+		    fprintf( stdout, "<Error> found in Line %d: variable '%s' had not be declared\n", linenum, str );
+			result =  __FALSE;
+		}
+        else if( node->category == CONSTANT_t ) {
+		    fprintf( stdout, "<Error> found in Line %d: constant '%s' cannot be assigned\n", linenum, str );
+        }
+		else {
+			result = __TRUE;
+		}
+	}
+	return result;
+}
+
+SEMTYPE getDeclarationType( struct SymTable *table, const char *str, int scope )
+{
+	struct PType *result;
+    struct SymNode *target;
+	// first check loop variable(s)
+	if( lookupLoopVar( table, str ) != 0 ) {
+		// fprintf( stdout, "<Error> found in Line %d: symbol '%s' is redeclared\n", linenum, str );
+		result = createPType( INTEGER_t );
+	}
+	else {	// then check normal variable(s)
+		result = lookupSymbOrFunc( table, str, scope )->type;
+	}
+	return result->type;
+}
+
+struct PType* verifyFuncInvoke( char *id, struct expr_sem *exprPtr, struct SymTable *table, int scope ) {
+	__BOOLEAN result = __TRUE;
+    struct SymNode *target;
+	// first check loop variable(s)
+    if( ( target = lookupSymbOrFunc( table, id, scope ) ) == 0 ) {	// only search current scope
+        fprintf( stdout, "<Error> found in Line %d: function '%s' had not been declared\n", linenum, id );
+        result =  __FALSE;
+    }
+    else {
+        if( verifyFuncInvokeAttr( target, exprPtr, table, scope ) ){
+            result = __TRUE;
+        }
+        else {
+            result = __FALSE;
+        }
+    }
+    return target;
+}
+
+__BOOLEAN verifyFuncInvokeAttr( struct SymNode *target, struct expr_sem *exprList, struct SymTable *table, int scope ) {
+	struct expr_sem *exprPtr;
+    struct PTypeList *targetPtr;
+	SEMTYPE typePtr, targetType;
+    if ( target->attribute->formalParam->paramNum != 0 ) {
+        for( targetPtr=target->attribute->formalParam->params ; (targetPtr->next)!=0; targetPtr=(targetPtr->next) ) {
+            targetType = targetPtr->value->type;
+            // determine whether a const or a var
+            if ( exprList->isDeref ) {
+                typePtr = exprList->pType->type;
+            }
+            else {
+                typePtr = getDeclarationType( table, exprList->varRef->id, scope );
+            }
+            // Compare type
+            if( typePtr != targetType ) {
+                if( targetType == REAL_t ) {
+                    if( typePtr != INTEGER_t || typePtr != REAL_t ) {
+                        fprintf( stdout, "<Error> found in Line %d: parameter type mismatch\n", linenum );
+                    }
+                }
+                else {
+                    fprintf( stdout, "<Error> found in Line %d: parameter type mismatch\n", linenum );
+                }
+                return __FALSE;
+                break;
+            }
+            else {
+                if( (targetPtr->next)!=0 ) {
+                    if( (exprList->next) == 0) {
+                        fprintf( stdout, "<Error> found in Line %d: too few arguments to function '%s'\n", linenum, target->name );
+                    }
+                }
+                else if( (targetPtr->next)!=0 ) {
+                    if( (exprList->next) != 0) {
+                        fprintf( stdout, "<Error> found in Line %d: too few arguments to function '%s'\n", linenum, target->name );
+                    }
+                }
+            }
+        }
+    }
+    else { // if empty params
+        if ( exprList != 0 ) {
+            fprintf( stdout, "<Error> found in Line %d: too few arguments to function '%s'\n", linenum, target->name );
+        }
+    }
+    return __TRUE;
+}
+
+char *getTypeString( SEMTYPE type ) {
+    char *result;
+    result = malloc(sizeof(char));
+    if( type == VOID_t ) {
+        strcpy(result, "void");
+    }
+    else if( type == INTEGER_t ) {
+        strcpy(result, "integer");
+    }
+    else if( type == BOOLEAN_t ) {
+        strcpy(result, "boolean");
+    }
+    else if( type == REAL_t ) {
+        strcpy(result, "real");
+    }
+    return result;
+}

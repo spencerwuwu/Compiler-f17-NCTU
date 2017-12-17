@@ -249,6 +249,23 @@ struct SymNode *lookupLoopVar( struct SymTable *table, const char *id )
 	return 0;
 }
 
+struct SymNode *lookupSymbOrFunc( struct SymTable *table, const char *id, int scope )
+{
+	int index = hashFunc( id );
+
+	struct SymNode *nodePtr;
+	for( nodePtr=(table->entry[index]) ; nodePtr!=0 ; nodePtr=(nodePtr->next) ) {
+		if( !strcmp(nodePtr->name,id) && ((nodePtr->scope)==scope) ) {
+			return nodePtr;
+		}
+	}
+	// not found...
+	if( scope == 0 )	return 0;	// null
+	else {
+        return lookupSymbOrFunc( table, id, scope-1 );
+	}
+}
+
 void deleteSymbol( struct SymNode *symbol )
 {
 	// delete name
