@@ -37,6 +37,8 @@ __BOOLEAN verifyFuncInvokeAttr( struct SymNode *target, struct expr_sem *exprPtr
 void verifyArrayIndex( struct SymTable *table, struct expr_sem *exprs, int scope );
 struct PType* checkArithmetic( struct SymTable *table, struct expr_sem *var, struct expr_sem *stmt, int scope);
 void checkReturnType( struct SymTable *table, struct expr_sem *exprs, struct PType *funcType, int scope );
+struct PType* checkArithmetic( struct SymTable *table, struct expr_sem *varA, struct expr_sem *varB, int scope);
+struct PType* checkAddArithmetic( struct SymTable *table, struct expr_sem *varA, struct expr_sem *varB, int scope);
 
 char *getTypeString( struct PType* type );
 

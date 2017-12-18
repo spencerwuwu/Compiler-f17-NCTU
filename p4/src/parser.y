@@ -430,7 +430,7 @@ relop_expr		: expr rel_op expr
 			  $$->isDeref = __TRUE;
 			  $$->varRef = 0;
 			  $$->next = 0;
-			  $$->pType = createPType( BOOLEAN_t );
+			  $$->pType = checkArithmetic( symbolTable, $1, $3, scope);
 			}
 			| expr { $$ = $1; }
 			;
@@ -449,8 +449,12 @@ expr			: expr add_op term
 			  $$->isDeref = __TRUE;
 			  $$->varRef = 0;
 			  $$->next = 0;
-			  $$->pType = malloc(sizeof(struct PType));
-	   		  $$->pType = checkArithmetic( symbolTable, $1, $3, scope);
+			  if( $2 == ADD_t ) {
+				  $$->pType = checkAddArithmetic( symbolTable, $1, $3, scope);
+			  }
+			  else {
+				  $$->pType = checkArithmetic( symbolTable, $1, $3, scope);
+			  }
 			}
 			| term { $$ = $1; }
 			;
@@ -465,7 +469,6 @@ term			: term mul_op factor
 			  $$->isDeref = __TRUE;
 			  $$->varRef = 0;
 			  $$->next = 0;
-			  $$->pType = malloc(sizeof(struct PType));
 	   		  $$->pType = checkArithmetic( symbolTable, $1, $3, scope);
 			}
 			| factor { $$ = $1; }
