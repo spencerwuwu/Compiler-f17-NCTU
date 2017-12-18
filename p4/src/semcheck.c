@@ -189,6 +189,12 @@ void increaseArrayDim( struct PType *pType, int lo, int hi )
 	++(pType->dimNum);
 	// setup properties of newDim
 	struct ArrayDimNode *newDim = (struct ArrayDimNode *)malloc(sizeof(struct ArrayDimNode));
+    if( lo >= hi ) {
+        fprintf( stdout, "<Error> found in Line %d: array lower bound must be smaller than uppder bound\n", linenum );
+    }
+    if( lo < 0 || hi < 0 ) {
+        fprintf( stdout, "<Error> found in Line %d: array lower bound and uppder bound must be greater or equal than 0\n", linenum );
+    }
 	newDim->low = lo;
 	newDim->high = hi;
 	newDim->size = hi-lo+1;
@@ -450,8 +456,8 @@ void deleteIdList( struct idNode_sem *idlist )
 }
 
 void checkExpr_sem( struct SymTable *table, struct expr_sem *var, struct expr_sem *stmt, int scope) {
-    char *var_name[200];
-    SEMTYPE var_type, stmt_type;
+    char var_name[200];
+    struct PType *var_type, *stmt_type;
     __BOOLEAN no_error = __TRUE;
     strcpy(var_name, var->varRef->id);
     if( verifyVarDeclaration(table, var_name, scope) ) {
@@ -463,21 +469,21 @@ void checkExpr_sem( struct SymTable *table, struct expr_sem *var, struct expr_se
     
     if( stmt->varRef != 0) {
         if( verifyVarDeclaration(table, var_name, scope) ) {
-            var_type = getDeclarationType( table, var_name, scope );
+            stmt_type = getDeclarationType( table, var_name, scope );
         }
     }
     else {
-        stmt_type = stmt->pType->type;
+        stmt_type = stmt->pType;
     }
 
     __BOOLEAN result = __FALSE;
-    if( var_type == REAL_t) {
-        if (stmt_type == REAL_t || stmt_type == INTEGER_t) {
+    if( var_type->type == REAL_t) {
+        if (stmt_type->type == REAL_t || stmt_type->type == INTEGER_t) {
             result = __TRUE;
         }
     }
     else {
-        if( var_type == stmt_type ) {
+        if( var_type->type == stmt_type->type ) {
             result = __TRUE;
         }
     }
@@ -511,19 +517,18 @@ __BOOLEAN verifyVarDeclaration( struct SymTable *table, const char *str, int sco
 	return result;
 }
 
-SEMTYPE getDeclarationType( struct SymTable *table, const char *str, int scope )
+struct PType* getDeclarationType( struct SymTable *table, const char *str, int scope )
 {
 	struct PType *result;
     struct SymNode *target;
 	// first check loop variable(s)
 	if( lookupLoopVar( table, str ) != 0 ) {
-		// fprintf( stdout, "<Error> found in Line %d: symbol '%s' is redeclared\n", linenum, str );
 		result = createPType( INTEGER_t );
 	}
 	else {	// then check normal variable(s)
 		result = lookupSymbOrFunc( table, str, scope )->type;
 	}
-	return result->type;
+	return result;
 }
 
 struct PType* verifyFuncInvoke( char *id, struct expr_sem *exprPtr, struct SymTable *table, int scope ) {
@@ -548,21 +553,21 @@ struct PType* verifyFuncInvoke( char *id, struct expr_sem *exprPtr, struct SymTa
 __BOOLEAN verifyFuncInvokeAttr( struct SymNode *target, struct expr_sem *exprList, struct SymTable *table, int scope ) {
 	struct expr_sem *exprPtr;
     struct PTypeList *targetPtr;
-	SEMTYPE typePtr, targetType;
+	struct PType *typePtr, *targetType;
     if ( target->attribute->formalParam->paramNum != 0 ) {
         for( targetPtr=target->attribute->formalParam->params ; (targetPtr->next)!=0; targetPtr=(targetPtr->next) ) {
-            targetType = targetPtr->value->type;
+            targetType = targetPtr->value;
             // determine whether a const or a var
             if ( exprList->isDeref ) {
-                typePtr = exprList->pType->type;
+                typePtr = exprList->pType;
             }
             else {
                 typePtr = getDeclarationType( table, exprList->varRef->id, scope );
             }
             // Compare type
-            if( typePtr != targetType ) {
-                if( targetType == REAL_t ) {
-                    if( typePtr != INTEGER_t || typePtr != REAL_t ) {
+            if( typePtr->type != targetType->type ) {
+                if( targetType->type == REAL_t ) {
+                    if( typePtr->type != INTEGER_t || typePtr->type != REAL_t ) {
                         fprintf( stdout, "<Error> found in Line %d: parameter type mismatch\n", linenum );
                     }
                 }
@@ -594,7 +599,8 @@ __BOOLEAN verifyFuncInvokeAttr( struct SymNode *target, struct expr_sem *exprLis
     return __TRUE;
 }
 
-char *getTypeString( SEMTYPE type ) {
+char *getTypeString( struct PType* ttype ) {
+    SEMTYPE type = ttype->type;
     char *result;
     result = malloc(sizeof(char));
     if( type == VOID_t ) {
@@ -610,4 +616,73 @@ char *getTypeString( SEMTYPE type ) {
         strcpy(result, "real");
     }
     return result;
+}
+
+void verifyArrayIndex( struct SymTable *table, struct expr_sem *exprs, int scope ) {
+    if( verifyVarDeclaration( table, exprs->varRef->id, scope ) ) {
+        if( getDeclarationType( table, exprs->varRef->id, scope )->type != INTEGER_t ) {
+            fprintf( stdout, "<Error> found in Line %d: each index of array references must be an integer.\n", linenum );
+        }
+    }
+}
+
+struct PType* checkArithmetic( struct SymTable *table, struct expr_sem *varA, struct expr_sem *varB, int scope) {
+    struct PType *varTypeA, *varTypeB;
+    __BOOLEAN flagA = __TRUE;
+    __BOOLEAN flagB = __TRUE;
+    char varNameA[200], varNameB[200];
+    if( varA->isDeref ) {
+        varTypeA = varA->pType;
+    }
+    else {
+        strcpy(varNameA, varA->varRef->id);
+        if( verifyVarDeclaration(table, varNameA, scope) ) {
+            varTypeA = getDeclarationType( table, varNameA, scope );
+        }
+        else {
+            flagA = __FALSE;
+        }
+    }
+
+    if( varB->isDeref ) {
+        varTypeB = varB->pType;
+    }
+    else {
+        strcpy(varNameB, varB->varRef->id);
+        if( verifyVarDeclaration(table, varNameB, scope) ) {
+            varTypeB = getDeclarationType( table, varNameB, scope );
+        }
+        else {
+            flagB = __FALSE;
+        }
+    }
+
+    if( flagA && flagB ) {
+        if( (varTypeA->type == INTEGER_t || varTypeA->type == REAL_t) && (varTypeB->type == INTEGER_t || varTypeB->type == REAL_t) ) {
+            if( varTypeA->type == INTEGER_t && varTypeB->type == INTEGER_t ) {
+                return varTypeA;
+            }
+            else if( varTypeA->type == REAL_t ) {
+                return varTypeA;
+            }
+            else {
+                return varTypeB;
+            }
+        }
+        else {
+	        printf("<Error> found in Line %d: for an arithmetic operotor, the operands must be integer or real types\n", linenum);
+			struct PType *tt = createPType( VOID_t );
+            return tt;
+        }
+    }
+}
+
+void checkReturnType( struct SymTable *table, struct expr_sem *exprs, struct PType *funcType, int scope ) {
+    struct PType* result;
+    if( verifyVarDeclaration( table, exprs->varRef->id, scope ) ) {
+    result = getDeclarationType( table, exprs->varRef->id, scope );
+        if( result->type != funcType->type ) {
+            fprintf( stdout, "<Error> found in Line %d: return type mismatch, function= %s, return= %s\n", linenum, getTypeString( result ), funcType->type );
+        }
+    }
 }

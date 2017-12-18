@@ -27,11 +27,13 @@ int scope = 0;
 int Opt_D = 1;			/* symbol table dump option */
 char fileName[256];
 char programName[256];
+char functionName[256];
 
 
 struct SymTable *symbolTable;	// main symbol table
 
 __BOOLEAN paramError;			// indicate is parameter have any error?
+__BOOLEAN performError = __TRUE;			
 
 struct PType *funcReturn;		// record function's return type, used at 'return statement' production rule
 
@@ -231,6 +233,9 @@ func_decl		: ID MK_LPAREN opt_param_list
 			  END ID
 			{
 			  funcReturn = 0;
+			  if( strcmp( $1, $11 ) != 0 ) {
+				printf("<Error> found in Line %d: function beginning ID inconsist with endding ID\n", linenum);
+			  }
 			}
 			;
 
@@ -366,6 +371,9 @@ loop_param		: INT_CONST { $$ = $1; }
 			;
 
 return_stmt		: RETURN boolean_expr MK_SEMICOLON
+			 {
+			 	checkReturnType( symbolTable, $2, funcReturn, scope );
+			 }
 			 ;
 
 opt_boolean_expr_list	: boolean_expr_list { $$ = $1; }
@@ -387,14 +395,24 @@ boolean_expr_list	: boolean_expr_list MK_COMMA boolean_expr
 
 boolean_expr		: boolean_expr OP_OR boolean_term
 			  {
-			  $$ = $1;
+			  $$ = (struct expr_sem *)malloc(sizeof(struct expr_sem));
+			  $$->isDeref = __TRUE;
+			  $$->varRef = 0;
+			  $$->next = 0;
+			  $$->pType = malloc(sizeof(struct PType));
+			  $$->pType->type = BOOLEAN_t;
 			}
 			| boolean_term { $$ = $1; }
 			;
 
 boolean_term		: boolean_term OP_AND boolean_factor
 			  {
-			  $$ = $1;
+			  $$ = (struct expr_sem *)malloc(sizeof(struct expr_sem));
+			  $$->isDeref = __TRUE;
+			  $$->varRef = 0;
+			  $$->next = 0;
+			  $$->pType = malloc(sizeof(struct PType));
+			  $$->pType->type = BOOLEAN_t;
 			}
 			| boolean_factor { $$ = $1; }
 			;
@@ -408,7 +426,11 @@ boolean_factor		: OP_NOT boolean_factor
 
 relop_expr		: expr rel_op expr
 			{
-			  $$ = $1;
+			  $$ = (struct expr_sem *)malloc(sizeof(struct expr_sem));
+			  $$->isDeref = __TRUE;
+			  $$->varRef = 0;
+			  $$->next = 0;
+			  $$->pType = createPType( BOOLEAN_t );
 			}
 			| expr { $$ = $1; }
 			;
@@ -423,7 +445,12 @@ rel_op			: OP_LT { $$ = LT_t; }
 
 expr			: expr add_op term
 	   {
-			  $$ = $1;
+			  $$ = (struct expr_sem *)malloc(sizeof(struct expr_sem));
+			  $$->isDeref = __TRUE;
+			  $$->varRef = 0;
+			  $$->next = 0;
+			  $$->pType = malloc(sizeof(struct PType));
+	   		  $$->pType = checkArithmetic( symbolTable, $1, $3, scope);
 			}
 			| term { $$ = $1; }
 			;
@@ -434,7 +461,12 @@ add_op			: OP_ADD { $$ = ADD_t; }
 
 term			: term mul_op factor
 	   {
-			  $$ = $1;
+			  $$ = (struct expr_sem *)malloc(sizeof(struct expr_sem));
+			  $$->isDeref = __TRUE;
+			  $$->varRef = 0;
+			  $$->next = 0;
+			  $$->pType = malloc(sizeof(struct PType));
+	   		  $$->pType = checkArithmetic( symbolTable, $1, $3, scope);
 			}
 			| factor { $$ = $1; }
 			;
@@ -483,11 +515,9 @@ factor			: var_ref
 			  $$->isDeref = __TRUE;
 			  $$->varRef = 0;
 			  $$->next = 0;
-
-struct SymNode *node = 0;
+			  struct SymNode *node = 0;
 			  node = lookupSymbol( symbolTable, $2, 0, __FALSE );
-
-$$->pType = node->type;
+			  $$->pType = node->type;
 			  $$->beginningOp = SUB_t;
 			}
 			| literal_const
@@ -519,6 +549,7 @@ var_ref			: ID
 
 dim			: MK_LB boolean_expr MK_RB
 	  {
+			  verifyArrayIndex( symbolTable, $2, scope );
 			  $$ = INTEGER_t;
 			}
 			;
