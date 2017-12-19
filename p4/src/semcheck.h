@@ -30,7 +30,7 @@ void deleteSymAttr( union SymAttr *attr, SEMTYPE category );
 void deleteIdList( struct idNode_sem *idlist );
 
 void checkExpr_sem( struct SymTable *table, struct expr_sem *var, struct expr_sem *stmt, int scope );
-__BOOLEAN verifyVarDeclaration( struct SymTable *table, const char *str, int scope );
+__BOOLEAN verifyVarDeclaration( struct SymTable *table, struct expr_sem *exprPtr, int scope );
 struct PType* getDeclarationType( struct SymTable *table, const char *str, int scope );
 struct PType* verifyFuncInvoke( char *id, struct expr_sem *exprPtr, struct SymTable *table, int scope );
 __BOOLEAN verifyFuncInvokeAttr( struct SymNode *target, struct expr_sem *exprPtr, struct SymTable *table, int scope );
@@ -39,6 +39,7 @@ struct PType* checkArithmetic( struct SymTable *table, struct expr_sem *var, str
 void checkReturnType( struct SymTable *table, struct expr_sem *exprs, struct PType *funcType, int scope );
 struct PType* checkArithmetic( struct SymTable *table, struct expr_sem *varA, struct expr_sem *varB, int scope);
 struct PType* checkAddArithmetic( struct SymTable *table, struct expr_sem *varA, struct expr_sem *varB, int scope);
+struct PType* getRemainArray( struct SymTable *table, struct expr_sem *exprPtr, int scope );
 
 char *getTypeString( struct PType* type );
 

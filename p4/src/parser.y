@@ -322,7 +322,11 @@ stmt_list		: stmt_list stmt
 
 simple_stmt		: var_ref OP_ASSIGN boolean_expr MK_SEMICOLON
 			 {
-			 	checkExpr_sem( symbolTable, $1, $3, scope);
+				if( $3->pType->isError == __TRUE ) { 
+				}
+				else {
+			 	  checkExpr_sem( symbolTable, $1, $3, scope);
+				}
 			}
 			| PRINT boolean_expr MK_SEMICOLON
 			| READ boolean_expr MK_SEMICOLON
@@ -372,7 +376,11 @@ loop_param		: INT_CONST { $$ = $1; }
 
 return_stmt		: RETURN boolean_expr MK_SEMICOLON
 			 {
-			 	checkReturnType( symbolTable, $2, funcReturn, scope );
+				if( $2->pType->isError == __TRUE ) { 
+				}
+				else {
+			 	  checkReturnType( symbolTable, $2, funcReturn, scope );
+				}
 			 }
 			 ;
 

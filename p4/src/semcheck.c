@@ -6,6 +6,7 @@
 #include "symtab.h"
 
 extern int linenum;
+extern __BOOLEAN performError;
 
 void printOperator( OPERATOR op )
 {
@@ -460,7 +461,7 @@ void checkExpr_sem( struct SymTable *table, struct expr_sem *var, struct expr_se
     struct PType *var_type, *stmt_type;
     __BOOLEAN no_error = __TRUE;
     strcpy(var_name, var->varRef->id);
-    if( verifyVarDeclaration(table, var_name, scope) ) {
+    if( verifyVarDeclaration(table, var, scope) ) {
         var_type = getDeclarationType( table, var_name, scope );
     }
     else {
@@ -468,7 +469,7 @@ void checkExpr_sem( struct SymTable *table, struct expr_sem *var, struct expr_se
     }
     
     if( stmt->varRef != 0) {
-        if( verifyVarDeclaration(table, var_name, scope) ) {
+        if( verifyVarDeclaration(table, var, scope) ) {
             stmt_type = getDeclarationType( table, var_name, scope );
         }
     }
@@ -496,10 +497,12 @@ void checkExpr_sem( struct SymTable *table, struct expr_sem *var, struct expr_se
 
 }
 
-__BOOLEAN verifyVarDeclaration( struct SymTable *table, const char *str, int scope )
+__BOOLEAN verifyVarDeclaration( struct SymTable *table, struct expr_sem *exprPtr, int scope )
 {
 	__BOOLEAN result = __TRUE;
     struct SymNode* node;
+    char str[200];
+    strcpy(str, exprPtr->varRef->id);
 	// first check loop variable(s)
 	if( lookupLoopVar( table, str ) != 0 ) {
 		result = __TRUE;
@@ -627,7 +630,7 @@ void verifyArrayIndex( struct SymTable *table, struct expr_sem *exprs, int scope
         }
     }
     else {
-        if( verifyVarDeclaration( table, exprs->varRef->id, scope ) ) {
+        if( verifyVarDeclaration( table, exprs, scope ) ) {
             if( getDeclarationType( table, exprs->varRef->id, scope )->type != INTEGER_t ) {
                 fprintf( stdout, "<Error> found in Line %d: each index of array references must be an integer.\n", linenum );
             }
@@ -645,7 +648,7 @@ struct PType* checkArithmetic( struct SymTable *table, struct expr_sem *varA, st
     }
     else {
         strcpy(varNameA, varA->varRef->id);
-        if( verifyVarDeclaration(table, varNameA, scope) ) {
+        if( verifyVarDeclaration(table, varA, scope) ) {
             varTypeA = getDeclarationType( table, varNameA, scope );
         }
         else {
@@ -658,7 +661,7 @@ struct PType* checkArithmetic( struct SymTable *table, struct expr_sem *varA, st
     }
     else {
         strcpy(varNameB, varB->varRef->id);
-        if( verifyVarDeclaration(table, varNameB, scope) ) {
+        if( verifyVarDeclaration(table, varB, scope) ) {
             varTypeB = getDeclarationType( table, varNameB, scope );
         }
         else {
@@ -681,6 +684,7 @@ struct PType* checkArithmetic( struct SymTable *table, struct expr_sem *varA, st
         else {
 	        printf("<Error> found in Line %d: for an arithmetic operotor, the operands must be integer or real types\n", linenum);
 			struct PType *tt = createPType( VOID_t );
+            tt->isError = __TRUE;
             return tt;
         }
     }
@@ -696,7 +700,7 @@ struct PType* checkAddArithmetic( struct SymTable *table, struct expr_sem *varA,
     }
     else {
         strcpy(varNameA, varA->varRef->id);
-        if( verifyVarDeclaration(table, varNameA, scope) ) {
+        if( verifyVarDeclaration(table, varA, scope) ) {
             varTypeA = getDeclarationType( table, varNameA, scope );
         }
         else {
@@ -709,7 +713,7 @@ struct PType* checkAddArithmetic( struct SymTable *table, struct expr_sem *varA,
     }
     else {
         strcpy(varNameB, varB->varRef->id);
-        if( verifyVarDeclaration(table, varNameB, scope) ) {
+        if( verifyVarDeclaration(table, varB, scope) ) {
             varTypeB = getDeclarationType( table, varNameB, scope );
         }
         else {
@@ -746,8 +750,11 @@ void checkReturnType( struct SymTable *table, struct expr_sem *exprs, struct PTy
     if( exprs->isDeref ) {
         result = exprs->pType;
     }
-    else if( verifyVarDeclaration( table, exprs->varRef->id, scope ) ) {
+    else if( verifyVarDeclaration( table, exprs, scope ) ) {
         result = getDeclarationType( table, exprs->varRef->id, scope );
+        // perform array check
+        if( funcType->isArray ) {
+        }
     }
     else {
         flag = __FALSE;
@@ -758,4 +765,32 @@ void checkReturnType( struct SymTable *table, struct expr_sem *exprs, struct PTy
             fprintf( stdout, "<Error> found in Line %d: return type mismatch, function= %s, return= %s\n", linenum, getTypeString( result ), funcType->type );
         }
     }
+}
+
+struct PType* getRemainArray( struct SymTable *table, struct expr_sem *exprPtr, int scope ) {
+    struct PType *orid, *result;
+	struct ArrayDimNode *myDim;
+
+    result = createPType( exprPtr->pType->type );
+    orid = getDeclarationType( table, exprPtr->varRef->id, scope );
+    if( orid->dimNum < exprPtr->pType->dimNum ) {
+        result->isError = __TRUE;
+        result->isArray = __TRUE;
+    }
+    else if( orid->dimNum == exprPtr->pType->dimNum ) {
+        result->isError = __FALSE;
+        result->isArray = __FALSE;
+    }
+    else {
+        result->isArray = __TRUE;
+        result->dimNum = orid->dimNum - exprPtr->pType->dimNum;
+        int tmp = exprPtr->pType->dimNum;
+        myDim = orid->dim;
+        while( tmp > 0 ) {
+            myDim = myDim->next;
+            tmp--;
+        }
+        result->dim = myDim;
+    }
+    return result;
 }
