@@ -494,6 +494,7 @@ void checkExpr_sem( struct SymTable *table, struct expr_sem *var, struct expr_se
                 if( compareArrayType( table, var_type, stmt_type, scope) ) {
                 }
                 else {
+	                printf("<Error> found in Line %d: type mismatch LHS= %s, RHS= %s\n", linenum, getTypeString(var_type), getTypeString(stmt_type) );
                     no_error = __FALSE;
                 }
             }
@@ -578,21 +579,35 @@ struct PType* verifyFuncInvoke( char *id, struct expr_sem *exprPtr, struct SymTa
 }
 
 __BOOLEAN verifyFuncInvokeAttr( struct SymNode *target, struct expr_sem *exprList, struct SymTable *table, int scope ) {
-	struct expr_sem *exprPtr;
+	struct expr_sem *exprPtr = exprList;
     struct PTypeList *targetPtr;
 	struct PType *typePtr, *targetType;
+    __BOOLEAN flag = __TRUE;
     if ( target->attribute->formalParam->paramNum != 0 ) {
-        for( targetPtr=target->attribute->formalParam->params ; (targetPtr->next)!=0; targetPtr=(targetPtr->next) ) {
+        for( targetPtr=target->attribute->formalParam->params ; targetPtr!=0; targetPtr=(targetPtr->next)) {
             targetType = targetPtr->value;
             // determine whether a const or a var
-            if ( exprList->isDeref ) {
-                typePtr = exprList->pType;
+            if ( exprPtr->isDeref ) {
+                typePtr = exprPtr->pType;
             }
             else {
-                typePtr = getDeclarationType( table, exprList->varRef->id, scope );
+                typePtr = getDeclarationType( table, exprPtr->varRef->id, scope );
                 if( typePtr->isArray ) {
-                    typePtr = getRemainArray( table, exprList, scope);
+                    typePtr = getRemainArray( table, exprPtr, scope);
                 }
+            }
+            // Compare array
+            if( typePtr->isArray == targetType->isArray ) {
+                if( typePtr->isArray ) {
+                    if( !compareArrayType( table, typePtr, targetType, scope) ) {
+	                    printf("<Error> found in Line %d: type mismatch attr= %s, required= %s\n", linenum, getTypeString(typePtr), getTypeString(targetType) );
+                        return __FALSE;
+                    }
+                }
+            }
+            else {
+                fprintf( stdout, "<Error> found in Line %d: return type mismatch, input= %s, attr= %s\n", linenum, getTypeString( typePtr ), getTypeString( targetType ) );
+                return __FALSE;
             }
             // Compare type
             if( typePtr->type != targetType->type ) {
@@ -609,20 +624,22 @@ __BOOLEAN verifyFuncInvokeAttr( struct SymNode *target, struct expr_sem *exprLis
             }
             else {
                 if( (targetPtr->next)!=0 ) {
-                    if( (exprList->next) == 0) {
+                    if( (exprPtr->next) == 0) {
                         fprintf( stdout, "<Error> found in Line %d: too few arguments to function '%s'\n", linenum, target->name );
                     }
+                    break;
                 }
-                else if( (targetPtr->next)!=0 ) {
-                    if( (exprList->next) != 0) {
-                        fprintf( stdout, "<Error> found in Line %d: too few arguments to function '%s'\n", linenum, target->name );
+                else if( (targetPtr->next)==0 ) {
+                    if( (exprPtr->next) != 0) {
+                        fprintf( stdout, "<Error> found in Line %d: too many arguments to function '%s'\n", linenum, target->name );
                     }
                 }
+                exprPtr = exprPtr->next;
             }
         }
     }
     else { // if empty params
-        if ( exprList != 0 ) {
+        if ( exprPtr != 0 ) {
             fprintf( stdout, "<Error> found in Line %d: too few arguments to function '%s'\n", linenum, target->name );
         }
     }
@@ -779,7 +796,6 @@ struct PType* checkAddArithmetic( struct SymTable *table, struct expr_sem *varA,
     }
 }
 
-// true for return type
 void checkReturnType( struct SymTable *table, struct expr_sem *exprs, struct PType *funcType, int scope ) {
     struct PType* result;
     __BOOLEAN flag = __TRUE;
@@ -805,6 +821,9 @@ void checkReturnType( struct SymTable *table, struct expr_sem *exprs, struct PTy
                     if( result->type != funcType->type ) {
                         error = __TRUE;
                     }
+                }
+                else {
+	                printf("<Error> found in Line %d: type mismatch function= %s, return= %s\n", linenum, getTypeString(funcType), getTypeString(result) );
                 }
             }
             else{
@@ -868,13 +887,12 @@ __BOOLEAN compareArrayType( struct SymTable *table, struct PType *typeA, struct 
             dimA = dimA->next;
             dimB = dimB->next;
         }
-        return __TRUE;
     }
     else {
         result = __FALSE;
     }
     if( !result ) {
-	    printf("<Error> found in Line %d: type mismatch LHS= %s, RHS= %s\n", linenum, getTypeString(typeA), getTypeString(typeB) );
+	    //printf("<Error> found in Line %d: type mismatch LHS= %s, RHS= %s\n", linenum, getTypeString(typeA), getTypeString(typeB) );
     }
     return result;
 }
