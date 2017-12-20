@@ -329,7 +329,13 @@ simple_stmt		: var_ref OP_ASSIGN boolean_expr MK_SEMICOLON
 				}
 			}
 			| PRINT boolean_expr MK_SEMICOLON
+			{
+				checkNotArray( symbolTable, $2, scope);
+			}
 			| READ boolean_expr MK_SEMICOLON
+			{
+				checkNotArray( symbolTable, $2, scope);
+			}
 			;
 
 proc_call_stmt		: ID MK_LPAREN opt_boolean_expr_list MK_RPAREN MK_SEMICOLON
@@ -347,6 +353,9 @@ cond_stmt		: IF condition THEN
 			;
 
 condition		: boolean_expr
+		   	{
+			  checkIsBoolean( symbolTable, $1, scope );
+			}
 		   ;
 
 while_stmt		: WHILE condition_while DO
@@ -355,6 +364,9 @@ while_stmt		: WHILE condition_while DO
 			;
 
 condition_while		: boolean_expr
+		   	{
+			  checkIsBoolean( symbolTable, $1, scope );
+			}
 				 ;
 
 for_stmt		: FOR ID
@@ -366,6 +378,14 @@ for_stmt		: FOR ID
 			  opt_stmt_list
 			  END DO
 			{
+			  if( $5>=0 && $7>=0 ) {
+			    if( $5 > $7 ) {
+	        	  printf("<Error> found in Line %d: loop parameters must be in the incremental order.\n", linenum );
+				}
+			  }
+			  else {
+	        	printf("<Error> found in Line %d: loop parameters must be greater than or equal to zero.\n", linenum );
+			  }
 			  popLoopVar( symbolTable );
 			}
 			;
@@ -436,7 +456,8 @@ relop_expr		: expr rel_op expr
 			  $$->isDeref = __TRUE;
 			  $$->varRef = 0;
 			  $$->next = 0;
-			  $$->pType = checkArithmetic( symbolTable, $1, $3, scope);
+			  $$->pType = checkArithmetic( symbolTable, $1, $3, scope, $2);
+			  $$->pType = createPType( BOOLEAN_t );
 			}
 			| expr { $$ = $1; }
 			;
@@ -455,12 +476,7 @@ expr			: expr add_op term
 			  $$->isDeref = __TRUE;
 			  $$->varRef = 0;
 			  $$->next = 0;
-			  if( $2 == ADD_t ) {
-				  $$->pType = checkAddArithmetic( symbolTable, $1, $3, scope);
-			  }
-			  else {
-				  $$->pType = checkArithmetic( symbolTable, $1, $3, scope);
-			  }
+			  $$->pType = checkArithmetic( symbolTable, $1, $3, scope, $2);
 			}
 			| term { $$ = $1; }
 			;
@@ -475,7 +491,7 @@ term			: term mul_op factor
 			  $$->isDeref = __TRUE;
 			  $$->varRef = 0;
 			  $$->next = 0;
-	   		  $$->pType = checkArithmetic( symbolTable, $1, $3, scope);
+			  $$->pType = checkArithmetic( symbolTable, $1, $3, scope, $2);
 			}
 			| factor { $$ = $1; }
 			;
