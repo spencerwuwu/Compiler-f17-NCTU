@@ -40,6 +40,7 @@ void checkReturnType( struct SymTable *table, struct expr_sem *exprs, struct PTy
 struct PType* checkArithmetic( struct SymTable *table, struct expr_sem *varA, struct expr_sem *varB, int scope);
 struct PType* checkAddArithmetic( struct SymTable *table, struct expr_sem *varA, struct expr_sem *varB, int scope);
 struct PType* getRemainArray( struct SymTable *table, struct expr_sem *exprPtr, int scope );
+__BOOLEAN compareArrayType( struct SymTable *table, struct PType *exprA, struct PType *exprB, int scope );
 
 char *getTypeString( struct PType* type );
 

@@ -127,7 +127,7 @@ decl			: VAR id_list MK_COLON scalar_type MK_SEMICOLON       /* scalar type decl
 				}
 			  }
 
-deleteIdList( $2 );
+			  deleteIdList( $2 );
 			}
 			| VAR id_list MK_COLON array_type MK_SEMICOLON        /* array type declaration */
 			{
@@ -322,7 +322,7 @@ stmt_list		: stmt_list stmt
 
 simple_stmt		: var_ref OP_ASSIGN boolean_expr MK_SEMICOLON
 			 {
-				if( $3->pType->isError == __TRUE ) { 
+				if( $3->pType != 0 && $3->pType->isError == __TRUE ) { 
 				}
 				else {
 			 	  checkExpr_sem( symbolTable, $1, $3, scope);
@@ -376,7 +376,7 @@ loop_param		: INT_CONST { $$ = $1; }
 
 return_stmt		: RETURN boolean_expr MK_SEMICOLON
 			 {
-				if( $2->pType->isError == __TRUE ) { 
+				if( $2->pType!=0 && $2->pType->isError==__TRUE ) { 
 				}
 				else {
 			 	  checkReturnType( symbolTable, $2, funcReturn, scope );
@@ -407,8 +407,7 @@ boolean_expr		: boolean_expr OP_OR boolean_term
 			  $$->isDeref = __TRUE;
 			  $$->varRef = 0;
 			  $$->next = 0;
-			  $$->pType = malloc(sizeof(struct PType));
-			  $$->pType->type = BOOLEAN_t;
+			  $$->pType = createPType( BOOLEAN_t );
 			}
 			| boolean_term { $$ = $1; }
 			;
@@ -419,8 +418,7 @@ boolean_term		: boolean_term OP_AND boolean_factor
 			  $$->isDeref = __TRUE;
 			  $$->varRef = 0;
 			  $$->next = 0;
-			  $$->pType = malloc(sizeof(struct PType));
-			  $$->pType->type = BOOLEAN_t;
+			  $$->pType = createPType( BOOLEAN_t );
 			}
 			| boolean_factor { $$ = $1; }
 			;

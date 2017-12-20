@@ -463,30 +463,52 @@ void checkExpr_sem( struct SymTable *table, struct expr_sem *var, struct expr_se
     strcpy(var_name, var->varRef->id);
     if( verifyVarDeclaration(table, var, scope) ) {
         var_type = getDeclarationType( table, var_name, scope );
+        if( var_type->isArray ) {
+            var_type = getRemainArray( table, var, scope );
+        }
     }
     else {
         no_error = __FALSE;
     }
     
-    if( stmt->varRef != 0) {
-        if( verifyVarDeclaration(table, var, scope) ) {
-            stmt_type = getDeclarationType( table, var_name, scope );
-        }
-    }
-    else {
+    if( stmt->isDeref ) {
         stmt_type = stmt->pType;
     }
-
-    __BOOLEAN result = __FALSE;
-    if( no_error ) {
-        if( var_type->type == REAL_t) {
-            if (stmt_type->type == REAL_t || stmt_type->type == INTEGER_t) {
-                result = __TRUE;
+    else {
+        if( verifyVarDeclaration(table, var, scope) ) {
+            stmt_type = getDeclarationType( table, var_name, scope );
+            if( stmt_type->isArray ) {
+                stmt_type = getRemainArray( table, stmt, scope );
             }
         }
         else {
-            if( var_type->type == stmt_type->type ) {
-                result = __TRUE;
+            no_error = __FALSE;
+        }
+    }
+
+    __BOOLEAN result = __FALSE;
+    // check type corresponding
+    if( no_error ) {
+        if( var_type->isArray == stmt_type->isArray ) {
+            if( var_type->isArray ) {
+                if( compareArrayType( table, var_type, stmt_type, scope) ) {
+                }
+                else {
+                    no_error = __FALSE;
+                }
+            }
+
+            if( no_error ) {
+                if( var_type->type == REAL_t) {
+                    if (stmt_type->type == REAL_t || stmt_type->type == INTEGER_t) {
+                        result = __TRUE;
+                    }
+                }
+                else {
+                    if( var_type->type == stmt_type->type ) {
+                        result = __TRUE;
+                    }
+                }
             }
         }
     }
@@ -568,6 +590,9 @@ __BOOLEAN verifyFuncInvokeAttr( struct SymNode *target, struct expr_sem *exprLis
             }
             else {
                 typePtr = getDeclarationType( table, exprList->varRef->id, scope );
+                if( typePtr->isArray ) {
+                    typePtr = getRemainArray( table, exprList, scope);
+                }
             }
             // Compare type
             if( typePtr->type != targetType->type ) {
@@ -605,9 +630,9 @@ __BOOLEAN verifyFuncInvokeAttr( struct SymNode *target, struct expr_sem *exprLis
 }
 
 char *getTypeString( struct PType* ttype ) {
-    SEMTYPE type = ttype->type;
-    char *result;
+    char *result, buf[10];
     result = malloc(sizeof(char));
+    SEMTYPE type = ttype->type;
     if( type == VOID_t ) {
         strcpy(result, "void");
     }
@@ -619,6 +644,16 @@ char *getTypeString( struct PType* ttype ) {
     }
     else if( type == REAL_t ) {
         strcpy(result, "real");
+    }
+    if( ttype->isArray ) {
+        int i;
+	    struct ArrayDimNode *dim;
+        strcat( result, " " );
+        for( i=0, dim=ttype->dim ; i<ttype->dimNum ; i++, dim=dim->next ) {
+            sprintf( buf, "[%d]", dim->size);
+            strcat( result, buf );
+        }
+        result[strlen(result)] = '\0';
     }
     return result;
 }
@@ -744,53 +779,102 @@ struct PType* checkAddArithmetic( struct SymTable *table, struct expr_sem *varA,
     }
 }
 
+// true for return type
 void checkReturnType( struct SymTable *table, struct expr_sem *exprs, struct PType *funcType, int scope ) {
     struct PType* result;
     __BOOLEAN flag = __TRUE;
+    __BOOLEAN error = __FALSE;
     if( exprs->isDeref ) {
         result = exprs->pType;
     }
     else if( verifyVarDeclaration( table, exprs, scope ) ) {
         result = getDeclarationType( table, exprs->varRef->id, scope );
         // perform array check
-        if( funcType->isArray ) {
-        }
     }
     else {
         flag = __FALSE;
     }
 
     if( flag ) {
-        if( result->type != funcType->type ) {
-            fprintf( stdout, "<Error> found in Line %d: return type mismatch, function= %s, return= %s\n", linenum, getTypeString( result ), funcType->type );
+        if( result->isArray ) {
+            result = getRemainArray( table, exprs, scope );
+        }
+        if( funcType->isArray ) {
+            if( result->isArray ) {
+                if( compareArrayType( table, funcType, result, scope) ) {
+                    if( result->type != funcType->type ) {
+                        error = __TRUE;
+                    }
+                }
+            }
+            else{
+                error = __TRUE;
+            }
+        }
+        else {
+            if( result->isArray || (result->type != funcType->type) ) {
+                error = __TRUE;
+            }
+        }
+        if( error ) {
+            fprintf( stdout, "<Error> found in Line %d: return type mismatch, function= %s, return= %s\n", linenum, getTypeString( funcType ), getTypeString( result ) );
         }
     }
 }
 
-struct PType* getRemainArray( struct SymTable *table, struct expr_sem *exprPtr, int scope ) {
+struct PType* getRemainArray( struct SymTable *table, struct expr_sem *exprs, int scope ) {
     struct PType *orid, *result;
 	struct ArrayDimNode *myDim;
 
-    result = createPType( exprPtr->pType->type );
-    orid = getDeclarationType( table, exprPtr->varRef->id, scope );
-    if( orid->dimNum < exprPtr->pType->dimNum ) {
+    orid = getDeclarationType( table, exprs->varRef->id, scope );
+    result = createPType( orid->type );
+    if( orid->dimNum < exprs->varRef->dimNum ) {
         result->isError = __TRUE;
         result->isArray = __TRUE;
+        result->dimNum = 0;
+        result->dim = 0;
     }
-    else if( orid->dimNum == exprPtr->pType->dimNum ) {
+    else if( orid->dimNum == exprs->varRef->dimNum ) {
         result->isError = __FALSE;
         result->isArray = __FALSE;
+        result->dimNum = 0;
+        result->dim = 0;
     }
     else {
         result->isArray = __TRUE;
-        result->dimNum = orid->dimNum - exprPtr->pType->dimNum;
-        int tmp = exprPtr->pType->dimNum;
+        result->dimNum = orid->dimNum - exprs->varRef->dimNum;
+        int tmp = exprs->varRef->dimNum;
         myDim = orid->dim;
         while( tmp > 0 ) {
             myDim = myDim->next;
             tmp--;
         }
         result->dim = myDim;
+    }
+    return result;
+}
+
+__BOOLEAN compareArrayType( struct SymTable *table, struct PType *typeA, struct PType *typeB, int scope ) {
+	struct ArrayDimNode *dimA, *dimB;
+    __BOOLEAN result = __TRUE;
+    if( typeA->dimNum == typeB->dimNum ) {
+        dimA = typeA->dim;
+        dimB = typeB->dim;
+        while( dimA != 0 ) {
+            if( dimA->size != dimB->size ) {
+                result =  __FALSE;
+                break;
+            }
+            dimA = dimA->next;
+            dimB = dimB->next;
+        }
+        return __TRUE;
+    }
+    else {
+        result = __FALSE;
+    }
+    if( !result ) {
+	    printf("<Error> found in Line %d: type mismatch LHS= %s, RHS= %s\n", linenum, getTypeString(typeA), getTypeString(typeB) );
     }
     return result;
 }
