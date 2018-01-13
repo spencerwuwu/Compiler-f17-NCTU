@@ -16,6 +16,7 @@ extern int yyparse(); /* declared by yacc */
 extern struct SymTable *symbolTable; /* declared in parser.y */
 extern struct PType *funcReturn;     /* declared in parser.y */
 extern char fileName[256];           /* declared in parser.y */
+extern struct LabelTable *labelTable;
 
 int main(int argc, char **argv)
 {
@@ -55,6 +56,9 @@ int main(int argc, char **argv)
     // initialize symbol table
     symbolTable = (struct SymTable *)malloc(sizeof(struct SymTable));
     initSymTab(symbolTable);
+
+    labelTable = (struct LabelTable *)malloc(sizeof(struct LabelTable));
+    labelTable->entry = 0;
 
     yyparse();
     exit(0);

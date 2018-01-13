@@ -31,6 +31,7 @@ void setPseudoComment( const char * );	/* pseudo comment option switch */
 float scientificToFloat( const char *str );
 
 extern int Opt_D;
+extern int wrt_fp;
 %}
 
 whitespace [ \t]+
@@ -201,6 +202,11 @@ identifier ({letter})({letter}|{digit})*
 				  LIST;
 				  if  (Opt_S)
 				  	printf("%d: %s",  linenum,  buf);
+                  if( wrt_fp > 0 ) {
+                      char tmp[400];
+                      sprintf( tmp, "; Line #%d: %s", linenum, buf );
+                      write( wrt_fp, tmp, strlen(tmp) );
+                  }
 				  linenum++;
 				  memset( buf, 0, MAX_LINE_LENG );
 		   		}

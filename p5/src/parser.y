@@ -7,9 +7,17 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <dirent.h>
+
+
 #include "header.h"
 #include "symtab.h"
 #include "semcheck.h"
+#include "codegen.h"
 
 int yydebug;
 
@@ -21,9 +29,15 @@ extern int yylex(void);
 int yyerror(char*);
 
 int scope = 0;
+int var_tmp = 0;
+int var_store = 0;
 int Opt_D = 1;                  // symbol table dump option
+int wrt_fp = 0;
+__BOOLEAN func_decl;
+char wrt_name[256];
 char fileName[256];             // filename of input file
 struct SymTable *symbolTable;	// main symbol table
+struct LabelTable *labelTable;
 __BOOLEAN paramError;			// indicate is parameter have any error?
 struct PType *funcReturn;		// record return type of function, used at 'return statement' production rule
 %}
@@ -74,6 +88,27 @@ program			: ID
 			  if (strcmp(fileName, $1)) {
 				fprintf (stdout, "<Error> found in Line %d: program beginning ID inconsist with file name\n", linenum);
 			  }
+			  fileName_to_codegenName();
+
+				// find file
+				DIR *dp;
+				struct dirent *dirp;
+				if( (dp = opendir(".")) != NULL ) {
+					while( (dirp=readdir(dp)) != NULL ) {
+						if( strcmp( dirp->d_name, wrt_name )==0 ) {
+							remove( wrt_name );
+							break;
+						}
+					}
+				}
+
+			  wrt_fp = open( wrt_name,  O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR );
+			  if( wrt_fp < 0 ) {
+				fprintf(stdout, "write  file  error\n");
+				exit(1);
+			  }
+
+			  init_codegen();
 			}
 			  MK_SEMICOLON
 			  program_body
@@ -88,6 +123,7 @@ program			: ID
 			  // dump symbol table
 			  if( Opt_D == 1 )
 				printSymTable( symbolTable, scope );
+        	  close(wrt_fp);
 			}
 			;
 
@@ -107,10 +143,15 @@ decl			: VAR id_list MK_COLON scalar_type MK_SEMICOLON       /* scalar type decl
 			  // insert into symbol table
 			  struct idNode_sem *ptr;
 			  struct SymNode *newNode;
-			  for (ptr=$2 ; ptr!=0; ptr=(ptr->next)) {
+			  for( ptr=$2 ; ptr!=0; ptr=(ptr->next) ) {
 			  	if( verifyRedeclaration(symbolTable, ptr->value, scope) == __TRUE ) {
 					newNode = createVarNode (ptr->value, scope, $4);
-					insertTab (symbolTable, newNode);
+					insertTab( symbolTable, newNode);
+					if( scope != 0 ) {
+						var_tmp++;
+					}
+					newNode->local_num = var_tmp;
+			  		variable_decl( scope, ptr->value, $4, newNode );
 				}
 			  }
 			  
@@ -223,6 +264,8 @@ func_decl		: ID MK_LPAREN opt_param_list
 				insertFuncIntoSymTable( symbolTable, $1, $3, $6, scope );
 			  }
 			  funcReturn = $6;
+			  function_heading_codegen( $1, $3, $6 );
+			  func_decl = __TRUE;
 			}
 			  MK_SEMICOLON
 			  compound_stmt
@@ -232,6 +275,8 @@ func_decl		: ID MK_LPAREN opt_param_list
 				fprintf( stdout, "<Error> found in Line %d: the end of the functionName mismatch\n", linenum );
 			  }
 			  funcReturn = 0;
+			  function_ending_codegen();
+			  func_decl = __FALSE;
 			}
 			;
 
@@ -294,7 +339,14 @@ stmt			: compound_stmt
 
 compound_stmt		: 
 			{ 
+			  if( scope == 0 && !func_decl ) {
+				char tmp[300];
+				sprintf( tmp, ".method public static main([Ljava/lang/String;)V\n\t.limit stack 100\n\t.limit local 100\n");
+				write( wrt_fp, tmp, strlen(tmp) );
+			  }
 			  scope++;
+			  var_store = var_tmp;
+			  enter_block( var_tmp );
 			}
 			  BEG
 			  opt_decl_list
@@ -304,8 +356,16 @@ compound_stmt		:
 			  // print contents of current scope
 			  if( Opt_D == 1 )
 			  	printSymTable( symbolTable, scope );
+
+			  leave_block( symbolTable, scope );
 			  deleteScope( symbolTable, scope );	// leave this scope, delete...
 			  scope--; 
+			  if( scope == 0 && !func_decl ) {
+				char tmp[300];
+				sprintf( tmp, "\treturn\n.end method\n");
+				write( wrt_fp, tmp, strlen(tmp) );
+			  }
+			  var_tmp = var_store;
 			}
 			;
 
@@ -329,9 +389,16 @@ simple_stmt		: var_ref OP_ASSIGN boolean_expr MK_SEMICOLON
 			  // if both LHS and RHS are exists, verify their type
 			  if( flagLHS==__TRUE && flagRHS==__TRUE )
 				verifyAssignmentTypeMatch( $1, $3 );
+			  
+			  assign_codegen( symbolTable, $1, $3, scope );
 			}
-			| PRINT boolean_expr MK_SEMICOLON { verifyScalarExpr( $2, "print" ); }
- 			| READ boolean_expr MK_SEMICOLON { verifyScalarExpr( $2, "read" ); }
+			| PRINT boolean_expr MK_SEMICOLON { 
+				verifyScalarExpr( $2, "print" ); 
+			    print_codegen( symbolTable, $2, scope );
+			}
+ 			| READ boolean_expr MK_SEMICOLON { 
+				verifyScalarExpr( $2, "read" ); 
+			}
 			;
 
 proc_call_stmt		: ID MK_LPAREN opt_boolean_expr_list MK_RPAREN MK_SEMICOLON
@@ -340,13 +407,38 @@ proc_call_stmt		: ID MK_LPAREN opt_boolean_expr_list MK_RPAREN MK_SEMICOLON
 			}
 			;
 
-cond_stmt		: IF condition THEN
-			  opt_stmt_list
-			  ELSE
-			  opt_stmt_list
+cond_stmt	: IF_header
+			  IF_else
 			  END IF
-			| IF condition THEN opt_stmt_list END IF
+			  {
+				removeLabel( labelTable );
+			  }
 			;
+
+IF_header	: IF_ condition THEN 
+			  opt_stmt_list
+		  {
+			if_ending_codegen( labelTable );
+		  }
+		  ;
+
+IF_		: IF
+		  {
+		  	struct LabelNode *node = createLabel ( linenum, "if", __FALSE );
+			insertLabel( labelTable, node );
+			if_heading_codegen( labelTable );
+		  }
+		;
+
+IF_else	:	ELSE_
+			opt_stmt_list
+		|
+		;
+ELSE_	:	ELSE
+	  	{
+			else_codegen( labelTable );
+		}
+		;
 
 condition		: boolean_expr { verifyBooleanExpr( $1, "if" ); } 
 			;
@@ -362,26 +454,38 @@ condition_while		: boolean_expr { verifyBooleanExpr( $1, "while" ); }
 for_stmt		: FOR ID 
 			{ 
 			  insertLoopVarIntoTable( symbolTable, $2 );
+			  struct LabelNode *node = createLabel ( linenum, "for", __FALSE );
+			  insertLabel( labelTable, node );
 			}
 			  OP_ASSIGN loop_param TO loop_param
 			{
 			  verifyLoopParam( $5, $7 );
+			  for_heading_codegen( labelTable, $5, $7 );
 			}
 			  DO
 			  opt_stmt_list
 			  END DO
 			{
 			  popLoopVar( symbolTable );
+			  for_ending_codegen( labelTable );
+			  removeLabel( labelTable );
 			}
 			;
 
-loop_param		: INT_CONST { $$ = $1; }
-			| OP_SUB INT_CONST { $$ = -$2; }
+loop_param		: INT_CONST 
+				{ 
+					$$ = $1; 
+				}
+			| OP_SUB INT_CONST 
+			{ 
+				$$ = -$2; 
+			}
 			;
 
 return_stmt		: RETURN boolean_expr MK_SEMICOLON
 			{
 			  verifyReturnStatement( $2, funcReturn );
+			  return_codegen( $2, funcReturn );
 			}
 			;
 
@@ -406,6 +510,9 @@ boolean_expr		: boolean_expr OP_OR boolean_term
 			{
 			  verifyAndOrOp( $1, OR_t, $3 );
 			  $$ = $1;
+		  	  struct LabelNode *node = createLabel ( linenum, "", __TRUE );
+			  rel_op_codegen( symbolTable, $1, $3, OR_t, scope, node );
+			  free( node );
 			}
 			| boolean_term { $$ = $1; }
 			;
@@ -414,6 +521,9 @@ boolean_term		: boolean_term OP_AND boolean_factor
 			{
 			  verifyAndOrOp( $1, AND_t, $3 );
 			  $$ = $1;
+		  	  struct LabelNode *node = createLabel ( linenum, "", __TRUE );
+			  rel_op_codegen( symbolTable, $1, $3, AND_t, scope, node );
+			  free( node );
 			}
 			| boolean_factor { $$ = $1; }
 			;
@@ -430,6 +540,9 @@ relop_expr		: expr rel_op expr
 			{
 			  verifyRelOp( $1, $2, $3 );
 			  $$ = $1;
+		  	  struct LabelNode *node = createLabel ( linenum, "", __TRUE );
+			  rel_op_codegen( symbolTable, $1, $3, $2, scope, node );
+			  free( node );
 			}
 			| expr { $$ = $1; }
 			;
@@ -445,6 +558,7 @@ rel_op			: OP_LT { $$ = LT_t; }
 expr			: expr add_op term
 			{
 			  verifyArithmeticOp( $1, $2, $3 );
+			  arith_codegen( symbolTable, $1, $3, $2, scope );
 			  $$ = $1;
 			}
 			| term { $$ = $1; }
@@ -463,8 +577,11 @@ term			: term mul_op factor
 				verifyArithmeticOp( $1, $2, $3 );
 			  }
 			  $$ = $1;
+			  arith_codegen( symbolTable, $1, $3, $2, scope );
 			}
-			| factor { $$ = $1; }
+			| factor { 
+			  $$ = $1; 
+			}
 			;
 
 mul_op			: OP_MUL { $$ = MUL_t; }
@@ -477,6 +594,7 @@ factor			: var_ref
 			  verifyExistence( symbolTable, $1, scope, __FALSE );
 			  $$ = $1;
 			  $$->beginningOp = NONE_t;
+			  var_codegen( symbolTable, $$, scope );
 			}
 			| OP_SUB var_ref
 			{
@@ -484,27 +602,32 @@ factor			: var_ref
 				verifyUnaryMinus( $2 );
 			  $$ = $2;
 			  $$->beginningOp = SUB_t;
+			  var_codegen( symbolTable, $$, scope );
 			}
 			| MK_LPAREN boolean_expr MK_RPAREN 
 			{
 			  $2->beginningOp = NONE_t;
 			  $$ = $2; 
+			  var_codegen( symbolTable, $$, scope );
 			}
 			| OP_SUB MK_LPAREN boolean_expr MK_RPAREN
 			{
 			  verifyUnaryMinus( $3 );
 			  $$ = $3;
 			  $$->beginningOp = SUB_t;
+			  var_codegen( symbolTable, $$, scope );
 			}
 			| ID MK_LPAREN opt_boolean_expr_list MK_RPAREN
 			{
 			  $$ = verifyFuncInvoke( $1, $3, symbolTable, scope );
 			  $$->beginningOp = NONE_t;
+			  //var_codegen( symbolTable, $$, scope );
 			}
 			| OP_SUB ID MK_LPAREN opt_boolean_expr_list MK_RPAREN
 			{
 			  $$ = verifyFuncInvoke( $2, $4, symbolTable, scope );
 			  $$->beginningOp = SUB_t;
+			  //var_codegen( symbolTable, $$, scope );
 			}
 			| literal_const
 			{
@@ -519,6 +642,8 @@ factor			: var_ref
 			  else {
 				$$->beginningOp = NONE_t;
 			  }
+			  $$->const_value = $1;
+			  var_codegen( symbolTable, $$, scope );
 			}
 			;
 
@@ -549,6 +674,11 @@ int yyerror( char *msg )
 	fprintf( stderr, "|\n" );
 	fprintf( stderr, "| Unmatched token: %s\n", yytext );
 	fprintf( stderr, "|--------------------------------------------------------------------------\n" );
+
+    if (wrt_fp > 0) {
+        close(wrt_fp);
+        remove(wrt_name);
+    }
 	exit(-1);
 }
 

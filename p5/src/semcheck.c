@@ -6,6 +6,10 @@
 #include "symtab.h"
 
 extern int linenum;
+extern int wrt_fp;
+extern char wrt_name[256];
+extern char fileName[256];
+
 
 void printOperator(OPERATOR op)
 {
@@ -237,10 +241,12 @@ void verifyLoopParam(int lo, int hi)
     if (lo < 0 || hi < 0)
     {
         fprintf(stdout, "<Error> found in Line %d: lower or upper bound of loop parameter < 0\n", linenum);
+        stop_outputing();
     }
     else if (lo > hi)
     {
         fprintf(stdout, "<Error> found in Line %d: loop parameter's lower bound > uppper bound\n", linenum);
+        stop_outputing();
     }
 }
 
@@ -267,6 +273,7 @@ void verifyArrayType(struct idNode_sem *ids, struct PType *pType)
             printf(", %s", ptr->value);
         }
         printf("\n");
+        stop_outputing();
     }
 }
 
@@ -277,6 +284,7 @@ SEMTYPE verifyArrayIndex(struct expr_sem *expr)
     {
         fprintf(stdout, "<Error> found in Line %d: array index is not integer\n", linenum);
         result = ERROR_t;
+        stop_outputing();
     }
     else
     {
@@ -292,6 +300,7 @@ __BOOLEAN verifyRedeclaration(struct SymTable *table, const char *str, int scope
     { // first check loop variable(s), then check normal variable(s)
         fprintf(stdout, "<Error> found in Line %d: symbol '%s' is redeclared\n", linenum, str);
         result = __FALSE;
+        stop_outputing();
     }
     else
     {
@@ -304,7 +313,7 @@ __BOOLEAN verifyExistence(struct SymTable *table, struct expr_sem *expr, int sco
 {
     __BOOLEAN result = __TRUE;
     // expr is dereferenced...
-    expr->isDeref = __TRUE;
+    expr->isDeref = __FALSE;
     struct SymNode *node;
     node = lookupLoopVar(table, expr->varRef->id); // first check loop variable
     if (node == NULL)
@@ -316,6 +325,7 @@ __BOOLEAN verifyExistence(struct SymTable *table, struct expr_sem *expr, int sco
         fprintf(stdout, "<Error> found in Line %d: '%s' is not declared\n", linenum, expr->varRef->id);
         expr->pType = createPType(ERROR_t);
         result = __FALSE;
+        stop_outputing();
     }
     else
     { // deference and verify, if pass, setup PType field in expr_sem
@@ -324,24 +334,28 @@ __BOOLEAN verifyExistence(struct SymTable *table, struct expr_sem *expr, int sco
             fprintf(stdout, "<Error> found in Line %d: '%s' is program\n", linenum, node->name);
             expr->pType = createPType(ERROR_t);
             result = __FALSE;
+            stop_outputing();
         }
         else if (node->category == FUNCTION_t)
         {
             fprintf(stdout, "<Error> found in Line %d: '%s' is function\n", linenum, node->name);
             expr->pType = createPType(ERROR_t);
             result = __FALSE;
+            stop_outputing();
         }
         else if (node->category == LOOPVAR_t && isAssignmentLHS == __TRUE)
         {
             fprintf(stdout, "<Error> found in Line %d: loop variable '%s' cannot be assigned\n", linenum, node->name);
             expr->pType = createPType(ERROR_t);
             result = __FALSE;
+            stop_outputing();
         }
         else if (node->category == CONSTANT_t && isAssignmentLHS == __TRUE)
         {
             fprintf(stdout, "<Error> found in Line %d: constant '%s' cannot be assigned\n", linenum, node->name);
             expr->pType = createPType(ERROR_t);
             result = __FALSE;
+            stop_outputing();
         }
         else
         {
@@ -356,6 +370,7 @@ __BOOLEAN verifyExistence(struct SymTable *table, struct expr_sem *expr, int sco
                     fprintf(stdout, "<Error> found in Line %d: '%s' is %d dimension(s), but reference in %d dimension(s)\n", linenum, node->name, node->type->dimNum, expr->varRef->dimNum);
                     expr->pType = createPType(ERROR_t);
                     result = __FALSE;
+                    stop_outputing();
                 }
                 else if (node->type->dimNum == expr->varRef->dimNum)
                 { // result in scalar!
@@ -390,11 +405,13 @@ void verifyUnaryMinus(struct expr_sem *expr)
         fprintf(stdout, "<Error> found in Line %d: operand of unary - is not integer/real\n", linenum);
         expr->isDeref = __TRUE;
         expr->pType->type = ERROR_t;
+        stop_outputing();
     }
     else if (!(((expr->pType->type) == INTEGER_t) || ((expr->pType->type) == REAL_t)))
     {
         fprintf(stdout, "<Error> found in Line %d: operand of unary - is not integer/real\n", linenum);
         expr->pType->type = ERROR_t;
+        stop_outputing();
     }
 }
 
@@ -406,11 +423,13 @@ void verifyUnaryNOT(struct expr_sem *expr)
     {
         fprintf(stdout, "<Error> found in Line %d: operand of operator 'not' cannot be array type\n", linenum);
         expr->pType->type = ERROR_t;
+        stop_outputing();
     }
     else if (expr->pType->type != BOOLEAN_t)
     {
         fprintf(stdout, "<Error> found in Line %d: operand of operator 'not' is not boolean\n", linenum);
         expr->pType->type = ERROR_t;
+        stop_outputing();
     }
     else
     { // pass verification, result is boolean
@@ -428,6 +447,7 @@ void verifyAssignmentTypeMatch(struct expr_sem *LHS, struct expr_sem *RHS)
             fprintf(stdout, "<Error> found in Line %d: error type in LHS of assignment\n", linenum);
         if ((RHS->pType->type) == ERROR_t)
             fprintf(stdout, "<Error> found in Line %d: error type in RHS of assignment\n", linenum);
+        stop_outputing();
     }
     else if (LHS->pType->type != RHS->pType->type)
     { // verify type
@@ -461,10 +481,12 @@ void verifyAssignmentTypeMatch(struct expr_sem *LHS, struct expr_sem *RHS)
         fprintf(stdout, ", RHS= ");
         printType(RHS->pType, 0);
         fprintf(stdout, "\n");
+        stop_outputing();
     }
     else if (LHS->pType->dimNum != 0)
     { // array assignment
         fprintf(stdout, "<Error> found in Line %d: array assignment is not allowed\n", linenum);
+        stop_outputing();
     }
 }
 
@@ -477,6 +499,7 @@ void verifyModOp(struct expr_sem *op1, struct expr_sem *op2)
             fprintf(stdout, "<Error> found in Line %d: error in left operand of 'mod' operator\n", linenum);
         if ((op2->pType->type) == ERROR_t)
             fprintf(stdout, "<Error> found in Line %d: error in right operand of 'mod' operator\n", linenum);
+        stop_outputing();
     }
     else if (op2->beginningOp != NONE_t)
     {
@@ -485,16 +508,19 @@ void verifyModOp(struct expr_sem *op1, struct expr_sem *op2)
         printOperator(op2->beginningOp);
         fprintf(stdout, "'\n");
         op1->pType->type = ERROR_t;
+        stop_outputing();
     }
     else if ((op1->pType->dimNum) != 0 || (op2->pType->dimNum) != 0)
     {
         fprintf(stdout, "<Error> found in Line %d: one of the operands of operator 'mod' is array type\n", linenum);
         op1->pType->type = ERROR_t;
+        stop_outputing();
     }
     else if ((op1->pType->type) != INTEGER_t || (op2->pType->type) != INTEGER_t)
     {
         fprintf(stdout, "<Error> found in Line %d: one of the operands of operator 'mod' is not integer\n", linenum);
         op1->pType->type = ERROR_t;
+        stop_outputing();
     }
     else
     { // pass verify
@@ -519,6 +545,7 @@ void verifyArithmeticOp(struct expr_sem *op1, OPERATOR operator, struct expr_sem
             printOperator(operator);
             fprintf(stdout, "' operator\n");
         }
+        stop_outputing();
     }
     else if (op2->beginningOp != NONE_t)
     {
@@ -528,6 +555,7 @@ void verifyArithmeticOp(struct expr_sem *op1, OPERATOR operator, struct expr_sem
         printOperator(op2->beginningOp);
         fprintf(stdout, "'\n");
         op1->pType->type = ERROR_t;
+        stop_outputing();
     }
     else if ((op1->pType->dimNum) != 0 || (op2->pType->dimNum) != 0)
     {
@@ -535,6 +563,7 @@ void verifyArithmeticOp(struct expr_sem *op1, OPERATOR operator, struct expr_sem
         printOperator(operator);
         fprintf(stdout, "' is array type\n");
         op1->pType->type = ERROR_t;
+        stop_outputing();
     }
     else if (op1->pType->type == STRING_t && op2->pType->type == STRING_t)
     { // string concatenation
@@ -547,6 +576,7 @@ void verifyArithmeticOp(struct expr_sem *op1, OPERATOR operator, struct expr_sem
             fprintf(stdout, "<Error> found in Line %d: one of the operands of operator '", linenum);
             printOperator(operator);
             fprintf(stdout, "' is string type\n");
+            stop_outputing();
         }
     }
     else if (((op1->pType->type == INTEGER_t || op1->pType->type == REAL_t) &&
@@ -567,6 +597,7 @@ void verifyArithmeticOp(struct expr_sem *op1, OPERATOR operator, struct expr_sem
         printOperator(operator);
         fprintf(stdout, "' are not both integer or both real\n");
         op1->pType->type = ERROR_t;
+        stop_outputing();
     }
 }
 
@@ -587,6 +618,7 @@ void verifyRelOp(struct expr_sem *op1, OPERATOR operator, struct expr_sem *op2)
             printOperator(operator);
             fprintf(stdout, "' operator\n");
         }
+        stop_outputing();
     }
     else if (op2->beginningOp != NONE_t)
     {
@@ -596,6 +628,7 @@ void verifyRelOp(struct expr_sem *op1, OPERATOR operator, struct expr_sem *op2)
         printOperator(op2->beginningOp);
         fprintf(stdout, "'\n");
         op1->pType->type = ERROR_t;
+        stop_outputing();
     }
     else if ((op1->pType->dimNum) != 0 || (op2->pType->dimNum) != 0)
     {
@@ -603,6 +636,7 @@ void verifyRelOp(struct expr_sem *op1, OPERATOR operator, struct expr_sem *op2)
         printOperator(operator);
         fprintf(stdout, "' is array type\n");
         op1->pType->type = ERROR_t;
+        stop_outputing();
     }
     else if (!((op1->pType->type == INTEGER_t && op2->pType->type == INTEGER_t) || (op1->pType->type == REAL_t && op2->pType->type == REAL_t)))
     {
@@ -610,6 +644,7 @@ void verifyRelOp(struct expr_sem *op1, OPERATOR operator, struct expr_sem *op2)
         printOperator(operator);
         fprintf(stdout, "' are not both integer or both real\n");
         op1->pType->type = ERROR_t;
+        stop_outputing();
     }
     else
     { // pass verification, result is boolean!
@@ -634,6 +669,7 @@ void verifyAndOrOp(struct expr_sem *op1, OPERATOR operator, struct expr_sem *op2
             printOperator(operator);
             fprintf(stdout, "' operator\n");
         }
+        stop_outputing();
     }
     else if (op2->beginningOp != NONE_t)
     {
@@ -643,6 +679,7 @@ void verifyAndOrOp(struct expr_sem *op1, OPERATOR operator, struct expr_sem *op2
         printOperator(op2->beginningOp);
         fprintf(stdout, "'\n");
         op1->pType->type = ERROR_t;
+        stop_outputing();
     }
     else if ((op1->pType->dimNum) != 0 || (op2->pType->dimNum) != 0)
     {
@@ -650,6 +687,7 @@ void verifyAndOrOp(struct expr_sem *op1, OPERATOR operator, struct expr_sem *op2
         printOperator(operator);
         fprintf(stdout, "' is array type\n");
         op1->pType->type = ERROR_t;
+        stop_outputing();
     }
     else if ((op1->pType->type) != BOOLEAN_t || (op2->pType->type) != BOOLEAN_t)
     {
@@ -657,6 +695,7 @@ void verifyAndOrOp(struct expr_sem *op1, OPERATOR operator, struct expr_sem *op2
         printOperator(operator);
         fprintf(stdout, "' is not boolean\n");
         op1->pType->type = ERROR_t;
+        stop_outputing();
     }
     else
     { // pass verification, result is boolean!
@@ -681,11 +720,13 @@ struct expr_sem *verifyFuncInvoke(const char *id, struct expr_sem *exprList, str
     { // symbol not found
         fprintf(stdout, "<Error> found in Line %d: symbol '%s' not found\n", linenum, id);
         result->pType = createPType(ERROR_t);
+        stop_outputing();
     }
     else if (node->category != FUNCTION_t)
     {
         fprintf(stdout, "<Error> found in Line %d: symbol '%s' is not a function\n", linenum, id);
         result->pType = createPType(ERROR_t);
+        stop_outputing();
     }
     else
     { // check parameters...
@@ -695,6 +736,7 @@ struct expr_sem *verifyFuncInvoke(const char *id, struct expr_sem *exprList, str
             {
                 fprintf(stdout, "<Error> found in Line %d: too many arguments to function '%s'\n", linenum, node->name);
                 result->pType = createPType(ERROR_t);
+                stop_outputing();
             }
             else
             {
@@ -734,6 +776,7 @@ struct expr_sem *verifyFuncInvoke(const char *id, struct expr_sem *exprList, str
             {
                 fprintf(stdout, "<Error> found in Line %d: parameter type mismatch\n", linenum);
                 result->pType = createPType(ERROR_t);
+        stop_outputing();
             }
             else
             {
@@ -741,11 +784,13 @@ struct expr_sem *verifyFuncInvoke(const char *id, struct expr_sem *exprList, str
                 {
                     fprintf(stdout, "<Error> found in Line %d: too few arguments to function '%s'\n", linenum, node->name);
                     result->pType = createPType(ERROR_t);
+        stop_outputing();
                 }
                 else if (exprPtr != NULL)
                 {
                     fprintf(stdout, "<Error> found in Line %d: too many arguments to function '%s'\n", linenum, node->name);
                     result->pType = createPType(ERROR_t);
+        stop_outputing();
                 }
                 else
                 {
@@ -764,6 +809,7 @@ void verifyScalarExpr(struct expr_sem *expr, const char *str)
     else if (expr->pType->dim)
     {
         fprintf(stdout, "<Error> found in Line %d: operand of %s statement is array type\n", linenum, str);
+        stop_outputing();
     }
 }
 
@@ -772,14 +818,17 @@ void verifyBooleanExpr(struct expr_sem *expr, const char *str)
     if (expr->pType->type == ERROR_t)
     {
         fprintf(stdout, "<Error> found in Line %d: operand of %s statement is not boolean type\n", linenum, str);
+        stop_outputing();
     }
     else if (expr->pType->dim)
     {
         fprintf(stdout, "<Error> found in Line %d: operand of %s statement is array type\n", linenum, str);
+        stop_outputing();
     }
     else if (expr->pType->type != BOOLEAN_t)
     {
         fprintf(stdout, "<Error> found in Line %d: operand of %s statement is not boolean type\n", linenum, str);
+        stop_outputing();
     }
 }
 
@@ -788,18 +837,22 @@ void verifyReturnStatement(struct expr_sem *expr, struct PType *funcReturn)
     if (funcReturn == 0)
     {
         fprintf(stdout, "<Error> found in Line %d: program cannot be returned\n", linenum);
+        stop_outputing();
     }
     else if (funcReturn->type == VOID_t)
     {
         fprintf(stdout, "<Error> found in Line %d: void function cannot be returned\n", linenum);
+        stop_outputing();
     }
     else if (funcReturn->type != expr->pType->type)
     {
         fprintf(stdout, "<Error> found in Line %d: return type mismatch\n", linenum);
+        stop_outputing();
     }
     else if (funcReturn->dimNum != expr->pType->dimNum)
     {
         fprintf(stdout, "<Error> found in Line %d: return dimension number mismatch\n", linenum);
+        stop_outputing();
     }
     else
     {
@@ -810,6 +863,7 @@ void verifyReturnStatement(struct expr_sem *expr, struct PType *funcReturn)
             if (returnDim->size != exprDim->size)
             {
                 fprintf(stdout, "<Error> found in Line %d: size of #%d-th dimension in return statement mismatch\n", linenum, i);
+        stop_outputing();
             }
         }
     }
@@ -822,6 +876,7 @@ __BOOLEAN insertParamIntoSymTable(struct SymTable *table, struct param_sem *para
     struct param_sem *parPtr;
     struct idNode_sem *idPtr;
     struct SymNode *newNode;
+    int local_num = 0;
     for (parPtr = params; parPtr != NULL; parPtr = (parPtr->next))
     {
         if (parPtr->pType->isError == __TRUE)
@@ -839,6 +894,7 @@ __BOOLEAN insertParamIntoSymTable(struct SymTable *table, struct param_sem *para
                 else
                 { // without error, insert into symbol table
                     newNode = createParamNode(idPtr->value, scope, parPtr->pType);
+                    newNode->local_num = local_num++;
                     insertTab(table, newNode);
                 }
             }
@@ -905,6 +961,7 @@ void insertLoopVarIntoTable(struct SymTable *table, const char *id)
         fprintf(stdout, "<Error> found in Line %d: symbol '%s' is redeclared\n", linenum, id);
         // Push it even redeclared, it will be pop out when leave
         pushLoopVar(table, createLoopVarNode(id));
+        stop_outputing();
     }
     else
     {

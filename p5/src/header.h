@@ -75,6 +75,7 @@ struct expr_sem {
 	__BOOLEAN isDeref;		// __TRUE: has been deferenced, examine `type` field
 	struct var_ref_sem *varRef;
 	struct PType *pType;
+    struct ConstAttr *const_value;
 
 	struct expr_sem *next;
 };
@@ -90,9 +91,22 @@ struct SymNode {
 	SEMTYPE category;		
 	struct PType *type;
 	union SymAttr *attribute;
+    int local_num;
 	
 	struct SymNode *next;
 	struct SymNode *prev;
+};
+
+struct LabelNode {
+    char *Label_start;
+    char *Label_true;
+    char *Label_false;
+    char *Label_else;
+    char *Label_exit;
+    __BOOLEAN Be_condition;
+
+    struct LabelNode *prev;
+    struct LabelNode *next;
 };
 
 struct SymTable {
@@ -100,6 +114,10 @@ struct SymTable {
 
 	int loopVarDepth;
 	struct SymNode *loopVar;
+};
+
+struct LabelTable {
+    struct LabelNode *entry;
 };
 
 #endif
