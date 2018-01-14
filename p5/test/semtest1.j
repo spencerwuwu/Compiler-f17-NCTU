@@ -28,6 +28,7 @@ Lelse_17:
 	imul
 	ireturn
 Lexit_17:
+	nop
 .end method
 
 .method public static fun2()V
@@ -37,6 +38,7 @@ Lexit_17:
 	ldc "message\n"
 	invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V
 	return
+	nop
 .end method
 
 .method public static main([Ljava/lang/String;)V

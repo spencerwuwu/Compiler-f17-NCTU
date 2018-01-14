@@ -473,7 +473,7 @@ void function_ending_codegen( struct PType *retType ) {
         sprintf( tmp, "\treturn\n" );
         writeline( tmp );
     }
-    sprintf( tmp, ".end method\n\n" );
+    sprintf( tmp, "\tnop\n.end method\n\n" );
     writeline( tmp );
 }
 

@@ -6,6 +6,7 @@
 	.limit stack 100
 	.limit locals 100
 	return
+	nop
 .end method
 
 .method public static fun2()F
@@ -13,6 +14,7 @@
 	.limit locals 100
 	ldc 10.000000
 	freturn
+	nop
 .end method
 
 .method public static fun3(II)I
@@ -22,6 +24,7 @@
 	iload 1
 	iadd
 	ireturn
+	nop
 .end method
 
 .method public static main([Ljava/lang/String;)V
