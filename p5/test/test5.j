@@ -11,7 +11,7 @@
 .method public static fun2()F
 	.limit stack 100
 	.limit locals 100
-	ldc 0.000000
+	ldc 10.000000
 	freturn
 .end method
 

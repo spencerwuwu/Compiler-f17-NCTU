@@ -9,15 +9,15 @@
 semtest1;
 
 var a : 10;       // a is integer constant 
+var c : 10;       // a is integer constant 
 var b : integer;
 
 fun( a,b : integer ) : integer;
 begin
-    return a+b;
     if a >= b then
-        return a*3;
+      return a*3;
     else
-        return b*3;
+      return b*3;
     end if
 end 
 end fun
@@ -41,7 +41,7 @@ begin
         print "loop\n";
         i := i + 1;
     end do
-    aa := a;
+    aa := c;
     aa := fun(1,2);    // ok
     fun(1,2);          // ok
     aa := fun(a,a);    // ok

@@ -11,8 +11,9 @@ var c, d, e: real;
 begin
         var a, b, c, d, e: integer;
         var f: real;
+        var g: 100;
         a := 3;
-        f := 1.23;
+        f := g;
 
         f := 1.23*3;
         print f;

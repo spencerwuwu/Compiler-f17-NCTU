@@ -142,7 +142,7 @@ struct SymNode *getLocalDecl(struct SymTable *table, const char *id, int scope )
             return nodePtr;
         }
     }
-    while( scope > 0 ) {
+    while( scope > 1 ) {
         if( (nodePtr = lookupSymbol(table, id, scope - 1, __FALSE)) != NULL ) {
             return  nodePtr;
         }
@@ -161,6 +161,12 @@ struct SymNode *getGlobalDecl(struct SymTable *table, const char *id, int scope 
         {
             return nodePtr;
         }
+    }
+    while( scope >= 1 ) {
+        if( (nodePtr = lookupSymbol(table, id, scope - 1, __FALSE)) != NULL ) {
+            return  nodePtr;
+        }
+        scope--;
     }
     return NULL;
 }
@@ -277,20 +283,33 @@ void var_codegen( struct SymTable *table, struct expr_sem *op1, int scope ) {
     }
     else {
         if( (ptr = getLocalDecl( table, op1->varRef->id, scope )) != NULL ) {
-            if( ptr->type->type == STRING_t ) {
-                sprintf( tmp, "\tldc \"%s\"\n", ptr->attribute->constVal->value);
-            }
-            else if( ptr->type->type == INTEGER_t ) {
-                sprintf( tmp, "\tiload %d\n", ptr->local_num);
-            }
-            else if( ptr->type->type == BOOLEAN_t ) {
-                sprintf( tmp, "\tiload %d\n", ptr->local_num);
-            }
-            else if( ptr->type->type == REAL_t ) {
-                sprintf( tmp, "\tfload %d\n", ptr->local_num);
+            if( ptr->category == CONSTANT_t ) {
+                if( ptr->type->type == REAL_t ) {
+                    sprintf( tmp, "\tldc %d\n", ptr->attribute->constVal->value.realVal);
+                }
+                else if ( ptr->type->type == STRING_t ) {
+                    sprintf( tmp, "\tldc \"%s\"\n", ptr->attribute->constVal->value);
+                }
+                else {
+                    sprintf( tmp, "\tldc %d\n", ptr->attribute->constVal->value);
+                }
             }
             else {
-                sprintf(tmp, "gg %s %d %d\n", ptr->name, ptr->local_num , ptr->category);
+                if( ptr->type->type == STRING_t ) {
+                    sprintf( tmp, "\tldc \"%s\"\n", ptr->attribute->constVal->value);
+                }
+                else if( ptr->type->type == INTEGER_t ) {
+                    sprintf( tmp, "\tiload %d\n", ptr->local_num);
+                }
+                else if( ptr->type->type == BOOLEAN_t ) {
+                    sprintf( tmp, "\tiload %d\n", ptr->local_num);
+                }
+                else if( ptr->type->type == REAL_t ) {
+                    sprintf( tmp, "\tfload %d\n", ptr->local_num);
+                }
+                else {
+                    sprintf(tmp, "gg %s %d %d\n", ptr->name, ptr->local_num , ptr->category);
+                }
             }
             writeline( tmp );
         }
@@ -313,17 +332,32 @@ void var_codegen( struct SymTable *table, struct expr_sem *op1, int scope ) {
             writeline( tmp );
         }
         else if( (ptr = getGlobalDecl( table, op1->varRef->id, scope )) != NULL ){
-            sprintf( tmp, "\tgetstatic %s/%s", fileName, ptr->name);
-            if( ptr->type->type == STRING_t ) {
-            }
-            else if( ptr->type->type == INTEGER_t ) {
-                strcat( tmp, "I\n" );
-            }
-            else if( ptr->type->type == REAL_t ) {
-                strcat( tmp, "F\n" );
+            if( ptr->category == CONSTANT_t ) {
+                if( ptr->type->type == REAL_t ) {
+                    sprintf( tmp, "\tldc %d\n", ptr->attribute->constVal->value.realVal);
+                }
+                else if ( ptr->type->type == STRING_t ) {
+                    sprintf( tmp, "\tldc \"%s\"\n", ptr->attribute->constVal->value);
+                }
+                else {
+                    sprintf( tmp, "\tldc %d\n", ptr->attribute->constVal->value);
+                }
             }
             else {
-                sprintf(tmp, "gg %s %d %d\n", ptr->name, ptr->local_num , ptr->category);
+                if( ptr->type->type == STRING_t ) {
+                    sprintf( tmp, "\tldc \"%s\"\n", ptr->attribute->constVal->value);
+                }
+                else if( ptr->type->type == INTEGER_t ) {
+                    sprintf( tmp, "\tgetstatic %s/%s", fileName, ptr->name);
+                    strcat( tmp, " I\n" );
+                }
+                else if( ptr->type->type == REAL_t ) {
+                    sprintf( tmp, "\tgetstatic %s/%s", fileName, ptr->name);
+                    strcat( tmp, " F\n" );
+                }
+                else {
+                    sprintf(tmp, "gg %s %d %d\n", ptr->name, ptr->local_num , ptr->category);
+                }
             }
             writeline( tmp );
         }
@@ -737,13 +771,13 @@ void for_heading_codegen( struct LabelTable *table, char *id, int lo, int hi, st
     writeline( tmp );
     int_codegen( hi );
 
-    sprintf( tmp, "\tisub\n\tiflt %s\n\ticonst_0\n\tgoto %s\n%s:\n\ticonst_1\n%s:\n\tifeq %s\n", start_l, false_l, true_l, false_l, exit_l );
+    sprintf( tmp, "\tisub\n\tifle %s\n\ticonst_0\n\tgoto %s\n%s:\n\ticonst_1\n%s:\n\tifeq %s\n", start_l, false_l, true_l, false_l, exit_l );
     writeline( tmp );
 }
 
 void for_ending_codegen( struct LabelTable *table, char *id, struct SymTable *stable ) {
     char tmp[300];
-    char *start_l = getTrueLabel(table);
+    char *start_l = getStartLabel(table);
     char *exit_l = getExitLabel(table);
     int num = lookupLoopVar( stable, id )->local_num;
 
@@ -753,11 +787,11 @@ void for_ending_codegen( struct LabelTable *table, char *id, struct SymTable *st
 
 void while_ending_codegen( struct LabelTable *table ) {
     char tmp[300];
-    char *start_l = getTrueLabel(table);
+    char *start_l = getStartLabel(table);
     char *else_l = getElseLabel(table);
     char *exit_l = getExitLabel(table);
 
-    sprintf( tmp, "\tgoto %s\n%s:\n%s\n", start_l, else_l, exit_l );
+    sprintf( tmp, "\tgoto %s\n%s:\n%s:\n", start_l, else_l, exit_l );
     writeline( tmp );
 }
 

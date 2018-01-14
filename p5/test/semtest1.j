@@ -6,10 +6,6 @@
 .method public static fun(II)I
 	.limit stack 100
 	.limit locals 100
-	iload 0
-	iload 1
-	iadd
-	ireturn
 Lif_17:
 	iload 0
 	iload 1
@@ -40,16 +36,17 @@ Lexit_17:
 	getstatic java/lang/System/out Ljava/io/PrintStream;
 	ldc "message\n"
 	invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V
+	return
 .end method
 
 .method public static main([Ljava/lang/String;)V
 	.limit stack 100
-	.limit local 100
+	.limit locals 100
 	new java/util/Scanner
 	dup
 	getstatic java/lang/System/in Ljava/io/InputStream;
 	invokespecial java/util/Scanner/<init>(Ljava/io/InputStream;)V
-	putstatic test1/_sc Ljava/util/Scanner;
+	putstatic semtest1/_sc Ljava/util/Scanner;
 	ldc 1
 	istore 4
 Lwhile_40:
@@ -70,10 +67,10 @@ Lfalse_40:
 	ldc 1
 	iadd
 	istore 4
-	goto Ltrue_40
+	goto Lwhile_40
 Lelse_40:
-Lexit_40
-	iload 0
+Lexit_40:
+	ldc 10
 	istore 1
 	ldc 1
 	ldc 2
@@ -81,8 +78,8 @@ Lexit_40
 	istore 1
 	ldc 1
 	ldc 2
-	iload 0
-	iload 0
+	ldc 10
+	ldc 10
 	invokestatic semtest1/fun(II)I
 	istore 1
 	return
