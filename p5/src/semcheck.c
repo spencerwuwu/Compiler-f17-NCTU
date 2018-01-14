@@ -9,6 +9,7 @@ extern int linenum;
 extern int wrt_fp;
 extern char wrt_name[256];
 extern char fileName[256];
+extern __BOOLEAN i2f_flag;
 
 
 void printOperator(OPERATOR op)
@@ -589,6 +590,7 @@ void verifyArithmeticOp(struct expr_sem *op1, OPERATOR operator, struct expr_sem
         else
         {
             op1->pType->type = REAL_t;
+            i2f_flag = __TRUE;
         }
     }
     else
@@ -952,7 +954,7 @@ void insertFuncIntoSymTable(struct SymTable *table, const char *id, struct param
     insertTab(table, newNode);
 }
 
-void insertLoopVarIntoTable(struct SymTable *table, const char *id)
+void insertLoopVarIntoTable(struct SymTable *table, const char *id, int num)
 {
     struct SymNode *nodePtr = 0;
     nodePtr = lookupLoopVar(table, id);
@@ -960,12 +962,16 @@ void insertLoopVarIntoTable(struct SymTable *table, const char *id)
     {
         fprintf(stdout, "<Error> found in Line %d: symbol '%s' is redeclared\n", linenum, id);
         // Push it even redeclared, it will be pop out when leave
-        pushLoopVar(table, createLoopVarNode(id));
+        struct SymNode *ptr = createLoopVarNode(id);
+        ptr->local_num = num;
+        pushLoopVar(table, ptr);
         stop_outputing();
     }
     else
     {
-        pushLoopVar(table, createLoopVarNode(id));
+        struct SymNode *ptr = createLoopVarNode(id);
+        ptr->local_num = num;
+        pushLoopVar(table, ptr);
     }
 }
 

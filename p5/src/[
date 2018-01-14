@@ -35,7 +35,6 @@ int Opt_D = 1;                  // symbol table dump option
 int wrt_fp = 0;
 __BOOLEAN func_decl;
 __BOOLEAN i2f_flag = __FALSE;
-__BOOLEAN i2f_ed = __FALSE;
 __BOOLEAN oper_onstack = __FALSE;
 __BOOLEAN read_flag = __FALSE;
 char wrt_name[256];
@@ -279,7 +278,7 @@ func_decl		: ID MK_LPAREN opt_param_list
 				fprintf( stdout, "<Error> found in Line %d: the end of the functionName mismatch\n", linenum );
 			  }
 			  funcReturn = 0;
-			  function_ending_codegen( $6 );
+			  function_ending_codegen();
 			  func_decl = __FALSE;
 			}
 			;
@@ -345,9 +344,9 @@ compound_stmt		:
 			{ 
 			  if( scope == 0 && !func_decl ) {
 				char tmp[300];
-				sprintf( tmp, ".method public static main([Ljava/lang/String;)V\n\t.limit stack 100\n\t.limit locals 100\n");
+				sprintf( tmp, ".method public static main([Ljava/lang/String;)V\n\t.limit stack 100\n\t.limit local 100\n");
 				writeline( tmp );
-				sprintf( tmp, "\tnew java/util/Scanner\n\tdup\n\tgetstatic java/lang/System/in Ljava/io/InputStream;\n\tinvokespecial java/util/Scanner/<init>(Ljava/io/InputStream;)V\n\tputstatic %s/_sc Ljava/util/Scanner;\n", fileName);
+				sprintf( tmp, "\tnew java/util/Scanner\n\tdup\n\tgetstatic java/lang/System/in Ljava/io/InputStream;\n\tinvokespecial java/util/Scanner/<init>(Ljava/io/InputStream;)V\n\tputstatic test1/_sc Ljava/util/Scanner;\n");
 				writeline( tmp );
 			  }
 			  scope++;
@@ -407,12 +406,9 @@ simple_stmt		: var_ref OP_ASSIGN boolean_expr MK_SEMICOLON
 			    print_codegen( symbolTable, $3, scope );
 			}
  			| READ 
-			{
-				read_flag = __TRUE;
-			}
+			{}
 			boolean_expr MK_SEMICOLON { 
 				verifyScalarExpr( $3, "read" ); 
-			    read_codegen( symbolTable, $3, scope );
 			}
 			;
 
@@ -448,7 +444,6 @@ IF_		: IF
 		  {
 		  	struct LabelNode *node = createLabel ( linenum, "if", __FALSE );
 			insertLabel( labelTable, node );
-			write_label_starter( labelTable );
 		  }
 		;
 
@@ -487,7 +482,6 @@ WHILE_	: WHILE
 	   {
 		  	struct LabelNode *node = createLabel ( linenum, "while", __FALSE );
 			insertLabel( labelTable, node );
-			write_label_starter( labelTable );
 	   }
 	   ;
 
@@ -496,25 +490,22 @@ condition_while		: boolean_expr { verifyBooleanExpr( $1, "while" ); }
 
 for_stmt		: FOR ID 
 			{ 
-			  if( scope != 0 ) {
-				var_tmp++;
-			  }
-			  insertLoopVarIntoTable( symbolTable, $2, var_tmp );
+			  insertLoopVarIntoTable( symbolTable, $2 );
 			  struct LabelNode *node = createLabel ( linenum, "for", __FALSE );
 			  insertLabel( labelTable, node );
 			}
 			  OP_ASSIGN loop_param TO loop_param
 			{
 			  verifyLoopParam( $5, $7 );
-			  for_heading_codegen( labelTable, $2, $5, $7, symbolTable );
+			  for_heading_codegen( labelTable, $5, $7 );
 			}
 			  DO
 			  opt_stmt_list
 			  END DO
 			{
-			  for_ending_codegen( labelTable, $2, symbolTable );
-			  removeLabel( labelTable );
 			  popLoopVar( symbolTable );
+			  for_ending_codegen( labelTable );
+			  removeLabel( labelTable );
 			}
 			;
 
@@ -652,7 +643,6 @@ factor			: var_ref
 			  $$ = $2;
 			  $$->beginningOp = SUB_t;
 			  var_codegen( symbolTable, $$, scope );
-			  neg_codegen( $$ );
 			}
 			| MK_LPAREN boolean_expr MK_RPAREN 
 			{
@@ -664,20 +654,18 @@ factor			: var_ref
 			  verifyUnaryMinus( $3 );
 			  $$ = $3;
 			  $$->beginningOp = SUB_t;
-			  neg_codegen( $$ );
 			}
 			| ID MK_LPAREN opt_boolean_expr_list MK_RPAREN
 			{
 			  $$ = verifyFuncInvoke( $1, $3, symbolTable, scope );
 			  $$->beginningOp = NONE_t;
-			  function_call_codegen( $1, $3, symbolTable, scope );
+			  //var_codegen( symbolTable, $$, scope );
 			}
 			| OP_SUB ID MK_LPAREN opt_boolean_expr_list MK_RPAREN
 			{
 			  $$ = verifyFuncInvoke( $2, $4, symbolTable, scope );
 			  $$->beginningOp = SUB_t;
-			  function_call_codegen( $2, $4, symbolTable, scope );
-			  neg_codegen( $$ );
+			  //var_codegen( symbolTable, $$, scope );
 			}
 			| literal_const
 			{
@@ -693,8 +681,6 @@ factor			: var_ref
 				$$->beginningOp = NONE_t;
 			  }
 			  $$->const_value = $1;
-              printf("gg %f\n", $1->value);
-            printf("gg %f\n",  $$->const_value->value);
 			  var_codegen( symbolTable, $$, scope );
 			}
 			;

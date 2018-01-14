@@ -18,7 +18,7 @@ void param_sem_addParam(struct param_sem *lhs, struct param_sem *rhs);
 
 __BOOLEAN insertParamIntoSymTable(struct SymTable *table, struct param_sem *params, int scope);
 void insertFuncIntoSymTable(struct SymTable *table, const char *id, struct param_sem *params, struct PType *retType, int scope);
-void insertLoopVarIntoTable(struct SymTable *table, const char *id);
+void insertLoopVarIntoTable(struct SymTable *table, const char *id, int num);
 
 void verifyArrayDim(struct PType *pType, int lo, int hi);
 void verifyArrayType(struct idNode_sem *ids, struct PType *pType);

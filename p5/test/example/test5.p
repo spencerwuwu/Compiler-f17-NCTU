@@ -11,7 +11,7 @@ end fun
 
 fun2():real;
 begin
-        return 10;
+        return 10.0;
 end
 end fun2
 

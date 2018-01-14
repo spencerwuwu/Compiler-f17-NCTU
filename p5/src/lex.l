@@ -205,7 +205,7 @@ identifier ({letter})({letter}|{digit})*
                   if( wrt_fp > 0 ) {
                       char tmp[400];
                       sprintf( tmp, "; Line #%d: %s", linenum, buf );
-                      write( wrt_fp, tmp, strlen(tmp) );
+                      //write( wrt_fp, tmp, strlen(tmp) );
                   }
 				  linenum++;
 				  memset( buf, 0, MAX_LINE_LENG );

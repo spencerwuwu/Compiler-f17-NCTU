@@ -33,10 +33,13 @@ begin
     
     var aa : integer;
     var bb,cc : boolean;
+    var i : integer;
 
     //&S+
-    for i := 1 to 9 do 
+    i := 1;
+    while i < 10 do
         print "loop\n";
+        i := i + 1;
     end do
     aa := a;
     aa := fun(1,2);    // ok

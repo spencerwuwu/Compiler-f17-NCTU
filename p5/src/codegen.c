@@ -10,6 +10,10 @@
 extern int wrt_fp;
 extern char wrt_name[256];
 extern char fileName[256];
+extern __BOOLEAN i2f_flag;
+extern __BOOLEAN oper_onstack;
+extern __BOOLEAN read_flag;
+extern __BOOLEAN i2f_ed;
 
 void writeline( char* line ) {
     if( wrt_fp > 0 ) {
@@ -52,7 +56,7 @@ void init_codegen() {
     char tmp[300];
     sprintf( tmp, "; %s\n", wrt_name);
     writeline( tmp );
-    sprintf( tmp, ".class public %s\n.super java/lang/Object\n", fileName);
+    sprintf( tmp, ".class public %s\n.super java/lang/Object\n.field public static _sc Ljava/util/Scanner;\n", fileName);
     writeline( tmp );
 }
 
@@ -189,8 +193,9 @@ void arith_codegen( struct SymTable *table, struct expr_sem *op1, struct expr_se
     if( op1->pType->type == REAL_t && op2->pType->type == INTEGER_t ) {
         sprintf( tmp, "\ti2f\n");
         writeline( tmp );
+        i2f_ed = __TRUE;
     }
-    else if( op2->pType->type == REAL_t && op1->pType->type == INTEGER_t ) {
+    else if( i2f_flag && op2->pType->type == REAL_t ) {
         int num = getNoneuseReg( table, scope );
         sprintf( tmp, "\tfstore %d\n", num);
         writeline( tmp );
@@ -198,6 +203,8 @@ void arith_codegen( struct SymTable *table, struct expr_sem *op1, struct expr_se
         writeline( tmp );
         sprintf( tmp, "\tfload %d\n", num);
         writeline( tmp );
+        i2f_flag = __FALSE;
+        i2f_ed = __TRUE;
     }
 
     switch( operator ) {
@@ -245,54 +252,78 @@ void var_codegen( struct SymTable *table, struct expr_sem *op1, int scope ) {
     char tmp[300];
     struct SymNode *ptr;
     int operType = 0;
+    if( read_flag ) {
+        read_flag = __FALSE;
+        return;
+    }
     if( op1->isDeref==__TRUE ) {
         if( op1->pType->type == STRING_t ) {
             sprintf( tmp, "\tldc \"%s\"\n", op1->const_value->value);
             writeline( tmp );
         }
         else if( op1->pType->type == INTEGER_t ) {
-            if( op1->const_value->hasMinus ) {
-                sprintf( tmp, "\tldc -%d\n", op1->const_value->value);
-            }
-            else {
                 sprintf( tmp, "\tldc %d\n", op1->const_value->value);
-            }
             writeline( tmp );
         }
         else if( op1->pType->type == REAL_t ) {
-            if( op1->const_value->hasMinus ) {
-                sprintf( tmp, "\tldc -%f\n", op1->const_value->value);
-            }
-            else {
+
                 sprintf( tmp, "\tldc %f\n", op1->const_value->value);
-            }
+            writeline( tmp );
+        }
+        else if( op1->pType->type == BOOLEAN_t ) {
+            sprintf( tmp, "\ticonst_%d\n", op1->const_value->value);
             writeline( tmp );
         }
     }
     else {
         if( (ptr = getLocalDecl( table, op1->varRef->id, scope )) != NULL ) {
-            sprintf(tmp, "gg %s %d\n", ptr->name, ptr->local_num );
-            writeline( tmp );
-            if( ptr->category == STRING_t ) {
-                sprintf( tmp, "ss%d\n", ptr->local_num);
+            if( ptr->type->type == STRING_t ) {
+                sprintf( tmp, "\tldc \"%s\"\n", ptr->attribute->constVal->value);
             }
-            else if( ptr->category == INTEGER_t ) {
+            else if( ptr->type->type == INTEGER_t ) {
                 sprintf( tmp, "\tiload %d\n", ptr->local_num);
             }
-            else if( ptr->category == REAL_t ) {
+            else if( ptr->type->type == BOOLEAN_t ) {
+                sprintf( tmp, "\tiload %d\n", ptr->local_num);
+            }
+            else if( ptr->type->type == REAL_t ) {
                 sprintf( tmp, "\tfload %d\n", ptr->local_num);
+            }
+            else {
+                sprintf(tmp, "gg %s %d %d\n", ptr->name, ptr->local_num , ptr->category);
+            }
+            writeline( tmp );
+        }
+        else if( (ptr = lookupLoopVar( table, op1->varRef->id)) != NULL ) {
+            if( ptr->type->type == STRING_t ) {
+                sprintf( tmp, "\tldc \"%s\"\n", ptr->attribute->constVal->value);
+            }
+            else if( ptr->type->type == INTEGER_t ) {
+                sprintf( tmp, "\tiload %d\n", ptr->local_num);
+            }
+            else if( ptr->type->type == BOOLEAN_t ) {
+                sprintf( tmp, "\tiload %d\n", ptr->local_num);
+            }
+            else if( ptr->type->type == REAL_t ) {
+                sprintf( tmp, "\tfload %d\n", ptr->local_num);
+            }
+            else {
+                sprintf(tmp, "gg %s %d %d\n", ptr->name, ptr->local_num , ptr->category);
             }
             writeline( tmp );
         }
         else if( (ptr = getGlobalDecl( table, op1->varRef->id, scope )) != NULL ){
             sprintf( tmp, "\tgetstatic %s/%s", fileName, ptr->name);
-            if( ptr->category == STRING_t ) {
+            if( ptr->type->type == STRING_t ) {
             }
-            else if( ptr->category == INTEGER_t ) {
+            else if( ptr->type->type == INTEGER_t ) {
                 strcat( tmp, "I\n" );
             }
-            else if( ptr->category == REAL_t ) {
+            else if( ptr->type->type == REAL_t ) {
                 strcat( tmp, "F\n" );
+            }
+            else {
+                sprintf(tmp, "gg %s %d %d\n", ptr->name, ptr->local_num , ptr->category);
             }
             writeline( tmp );
         }
@@ -304,32 +335,10 @@ void function_call_codegen(const char *id, struct expr_sem *exprList, struct Sym
     struct PTypeList *funcAttr;
     struct expr_sem *exprPtr;
     node = lookupSymbol(table, id, 0, __FALSE); // function always in scope 0 (global scope)
+    int i;
 
-    for( exprPtr = exprList; exprPtr != 0; exprPtr = exprPtr->next ) {
-        if( exprPtr->isDeref ) {
-            switch( exprPtr->pType->type ) {
-            case STRING_t:
-                break;
-            case INTEGER_t:
-                sprintf( tmp, "sipush %d\n", exprPtr->const_value->value );
-                writeline( tmp );
-                break;
-            case REAL_t:
-                //sprintf( tmp, "sfpush %f\n", exprPtr->const_value->value );
-                //writeline( tmp );
-                break;
-            case BOOLEAN_t:
-                //sprintf( tmp, "sfpush %f\n", exprPtr->const_value->value );
-                //writeline( tmp );
-                break;
-            }
-        }
-    }
-
-
-    sprintf( tmp, "invokestatic %s/%s", fileName, id );
-    /*
-    for( int i = 0, funcAttr = node->attribute->formalParam->params; i < node->attribute->formalParam->paramNum; i++, funcAttr = funcAttr->next ) {
+    sprintf( tmp, "\tinvokestatic %s/%s(", fileName, id );
+    for( i = 0, funcAttr = node->attribute->formalParam->params; i < node->attribute->formalParam->paramNum; i++, funcAttr = funcAttr->next ) {
         switch( funcAttr->value->type ) {
             case STRING_t:
                 strcat( tmp, "V" );
@@ -341,14 +350,13 @@ void function_call_codegen(const char *id, struct expr_sem *exprList, struct Sym
                 strcat( tmp, "F" );
                 break;
             case BOOLEAN_t:
-                strcat( tmp, "Z" );
+                strcat( tmp, "I" );
                 break;
             case VOID_t:
                 strcat( tmp, "V" );
                 break;
         }
     }
-    */
     strcat( tmp, ")" );
     switch( node->type->type ) {
         case STRING_t:
@@ -425,8 +433,12 @@ void function_heading_codegen( const char *id, struct param_sem *params, struct 
     writeline( tmp );
 
 }
-void function_ending_codegen() {
+void function_ending_codegen( struct PType *retType ) {
     char tmp[300];
+    if( retType->type == VOID_t ) {
+        sprintf( tmp, "\treturn\n" );
+        writeline( tmp );
+    }
     sprintf( tmp, ".end method\n\n" );
     writeline( tmp );
 }
@@ -449,64 +461,79 @@ void return_codegen(struct expr_sem *expr, struct PType *funcReturn) {
 void assign_codegen( struct SymTable *table, struct expr_sem *lhs, struct expr_sem *rhs, int scope ) {
     char tmp[300];
     struct SymNode *ptr;
-    if( lhs->pType->type == REAL_t || rhs->pType->type == INTEGER_t ) {
-        sprintf( tmp, "\ti2f\n" );
+    if( !i2f_ed && lhs->pType->type == REAL_t && rhs->pType->type == INTEGER_t ) {
+        sprintf( tmp, "i2f\n" );
         writeline( tmp );
     }
+    i2f_ed = __FALSE;
     if( (ptr = getLocalDecl( table, lhs->varRef->id, scope )) != NULL ) {
         if( ptr->category == STRING_t ) {
         }
-        else if( ptr->category == INTEGER_t ) {
+        else if( ptr->type->type == INTEGER_t ) {
             sprintf( tmp, "\tistore %d\n", ptr->local_num);
         }
-        else if( ptr->category == REAL_t ) {
+        else if( ptr->type->type == REAL_t ) {
             sprintf( tmp, "\tfstore %d\n", ptr->local_num);
+        }
+        else if( ptr->type->type == BOOLEAN_t ) {
+            sprintf( tmp, "\tistore %d\n", ptr->local_num);
         }
         writeline( tmp );
     }
+}
+
+void print_heading_codegen() {
+    char tmp[300];
+    struct SymNode *ptr;
+    sprintf( tmp, "\tgetstatic java/lang/System/out Ljava/io/PrintStream;\n" );
+    writeline( tmp );
 }
 
 void print_codegen( struct SymTable *table, struct expr_sem *rhs, int scope ) {
     char tmp[300];
     struct SymNode *ptr;
-    sprintf( tmp, "\tgetstatic java/lang/System/out Ljava/io/PrintStream;\n" );
-    writeline( tmp );
 
     if( !rhs->isDeref ) {
         if( (ptr = getLocalDecl( table, rhs->varRef->id, scope )) != NULL ) {
-            if( ptr->category == STRING_t ) {
-            }
-            else if( ptr->category == INTEGER_t ) {
-                sprintf( tmp, "\tiload\n", ptr->local_num);
-            }
-            else if( ptr->category == REAL_t ) {
-                sprintf( tmp, "\tfload\n", ptr->local_num);
-            }
-            writeline( tmp );
+        }
+        else if( (ptr = lookupLoopVar( table, rhs->varRef->id )) != NULL ) {
         }
         else if( (ptr = getGlobalDecl( table, rhs->varRef->id, scope )) != NULL ){
             sprintf( tmp, "\tgetstatic %s/%s", fileName, ptr->name);
-            if( ptr->category == STRING_t ) {
-                strcat( tmp, "I\n" );
-            }
-            else if( ptr->category == INTEGER_t ) {
-                strcat( tmp, "I\n" );
-            }
-            else if( ptr->category == REAL_t ) {
-                strcat( tmp, "F\n" );
-            }
+            writeline( tmp );
+        }
+        if( ptr->type->type == STRING_t ) {
+            sprintf( tmp, "\tinvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
+            writeline( tmp );
+        }
+        else if( ptr->type->type == INTEGER_t || ptr->type->type == BOOLEAN_t ) {
+            sprintf( tmp, "\tinvokevirtual java/io/PrintStream/print(I)V\n");
+            writeline( tmp );
+        }
+        else if( ptr->type->type == REAL_t ) {
+            sprintf( tmp, "\tinvokevirtual java/io/PrintStream/print(F)V\n");
             writeline( tmp );
         }
     }
     else {
+        if( rhs->pType->type == STRING_t ) {
+            sprintf( tmp, "\tinvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
+            writeline( tmp );
+        }
+        else if( rhs->pType->type == INTEGER_t || rhs->pType->type == BOOLEAN_t ) {
+            sprintf( tmp, "\tinvokevirtual java/io/PrintStream/print(I)V\n");
+            writeline( tmp );
+        }
+        else if( rhs->pType->type == REAL_t ) {
+            sprintf( tmp, "\tinvokevirtual java/io/PrintStream/print(F)V\n");
+            writeline( tmp );
+        }
     }
 
-    sprintf( tmp, "\tinvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
-    writeline( tmp );
 }
 
 struct LabelNode *createLabel( int num, char* type, __BOOLEAN condition ) {
-	struct LabelNode *newNode = (struct LabelNode *)malloc(sizeof(struct LabelNode));
+    struct LabelNode *newNode = (struct LabelNode *)malloc(sizeof(struct LabelNode));
     newNode->Label_start = malloc(sizeof(char));
     newNode->Label_true = malloc(sizeof(char));
     newNode->Label_false = malloc(sizeof(char));
@@ -537,8 +564,12 @@ void insertLabel(struct LabelTable *table, struct LabelNode *newNode) {
         table->entry = newNode;
     }
 
-    sprintf( tmp, "%s:\n", newNode->Label_start);
-    writeline( tmp );
+}
+
+void write_label_starter( struct LabelTable *table ) {
+    char tmp[300];
+    sprintf( tmp, "%s:\n", getStartLabel( table ) );
+    writeline( tmp ) ;
 }
 
 struct LabelNode * getCurrentLabel( struct LabelTable *table ) {
@@ -601,7 +632,7 @@ void removeLabel( struct LabelTable *table ) {
     free( nodePtr );
 }
 
-void if_heading_codegen( struct LabelTable *table ) {
+void ifwhile_heading_codegen( struct LabelTable *table ) {
     char tmp[300];
     sprintf( tmp, "\tifeq %s\n", getElseLabel( table ) );
     writeline( tmp );
@@ -635,6 +666,7 @@ void rel_op_codegen( struct SymTable *table, struct expr_sem *op1, struct expr_s
     if( op1->pType->type == REAL_t && op2->pType->type == INTEGER_t ) {
         sprintf( tmp, "\ti2f\n");
         writeline( tmp );
+        i2f_ed = __TRUE;
     }
     else if( op2->pType->type == REAL_t && op1->pType->type == INTEGER_t ) {
         int num = getNoneuseReg( table, scope );
@@ -644,6 +676,7 @@ void rel_op_codegen( struct SymTable *table, struct expr_sem *op1, struct expr_s
         writeline( tmp );
         sprintf( tmp, "\tfload %d\n", num);
         writeline( tmp );
+        i2f_ed = __TRUE;
     }
 
     if( operType == 1 )
@@ -684,36 +717,117 @@ void rel_op_codegen( struct SymTable *table, struct expr_sem *op1, struct expr_s
 
 void int_codegen( int value ) {
     char tmp[300];
-    sprintf( tmp, "\tsipush %d\n", value );
+    sprintf( tmp, "\tldc %d\n", value );
     writeline( tmp );
 }
 
-void for_heading_codegen( struct LabelTable *table, int lo, int hi ) {
+void for_heading_codegen( struct LabelTable *table, char *id, int lo, int hi, struct SymTable *stable ) {
     char tmp[300];
     char *start_l = getTrueLabel(table);
     char *true_l = getTrueLabel(table);
     char *false_l = getFalseLabel(table);
     char *exit_l = getExitLabel(table);
+    int num = lookupLoopVar( stable, id )->local_num;
     int_codegen( lo );
-    
-    sprintf( tmp, "\tistore 1\n" );
+    sprintf( tmp , "\tistore %d\n", num );
     writeline( tmp );
 
-    sprintf( tmp, "%s:\n", start_l );
+    write_label_starter( table );
+    sprintf( tmp , "\tiload %d\n", num );
     writeline( tmp );
-
-    sprintf( tmp, "\tiload 1\n" );
-    writeline( tmp );
-
     int_codegen( hi );
-    sprintf( tmp, "\tisub\n\tiflt %s\n\ticonst_0\n\tgoto %s\n%s:\n\ticonst_1\n%s:\n\tifeq %s\n", true_l, false_l, true_l, false_l, exit_l );
+
+    sprintf( tmp, "\tisub\n\tiflt %s\n\ticonst_0\n\tgoto %s\n%s:\n\ticonst_1\n%s:\n\tifeq %s\n", start_l, false_l, true_l, false_l, exit_l );
     writeline( tmp );
 }
 
-void for_ending_codegen( struct LabelTable *table ) {
+void for_ending_codegen( struct LabelTable *table, char *id, struct SymTable *stable ) {
     char tmp[300];
     char *start_l = getTrueLabel(table);
     char *exit_l = getExitLabel(table);
-    sprintf( tmp, "\tiload 1\n\tsipush 1\n\tiadd\n\tistore 1\n\tgoto %s\n%s:\n", start_l, exit_l );
+    int num = lookupLoopVar( stable, id )->local_num;
+
+    sprintf( tmp, "\tiload %d\n\tsipush 1\n\tiadd\n\tistore %d\n\tgoto %s\n%s:\n", num, num, start_l, exit_l );
+    writeline( tmp );
+}
+
+void while_ending_codegen( struct LabelTable *table ) {
+    char tmp[300];
+    char *start_l = getTrueLabel(table);
+    char *else_l = getElseLabel(table);
+    char *exit_l = getExitLabel(table);
+
+    sprintf( tmp, "\tgoto %s\n%s:\n%s\n", start_l, else_l, exit_l );
+    writeline( tmp );
+}
+
+void read_codegen( struct SymTable *table, struct expr_sem *rhs, int scope ) {
+    char tmp[300];
+    struct SymNode *ptr;
+
+    sprintf( tmp, "\t; invoke java.util.Scanner.nextXXX()\n\tgetstatic %s/_sc Ljava/util/Scanner;\n", fileName );
+    writeline( tmp );
+
+    if( !rhs->isDeref ) {
+        if( (ptr = getLocalDecl( table, rhs->varRef->id, scope )) != NULL ) {
+        }
+        else if( (ptr = getGlobalDecl( table, rhs->varRef->id, scope )) != NULL ){
+            sprintf( tmp, "\tgetstatic %s/%s", fileName, ptr->name);
+            writeline( tmp );
+        }
+        if( ptr->type->type == STRING_t ) {
+            sprintf( tmp, "\tinvokevirtual java/util/Scanner/nextLine()V\n");
+            writeline( tmp );
+        }
+        else if( ptr->type->type == INTEGER_t || ptr->type->type == BOOLEAN_t ) {
+            sprintf( tmp, "\tinvokevirtual java/util/Scanner/nextInt()I\n");
+            writeline( tmp );
+        }
+        else if( ptr->type->type == REAL_t ) {
+            sprintf( tmp, "\tinvokevirtual java/util/Scanner/nextFloat()F\n");
+            writeline( tmp );
+        }
+    }
+    else {
+        if( rhs->pType->type == STRING_t ) {
+            sprintf( tmp, "\tinvokevirtual java/util/Scanner/nextLine()V\n");
+            writeline( tmp );
+        }
+        else if( rhs->pType->type == INTEGER_t || rhs->pType->type == BOOLEAN_t ) {
+            sprintf( tmp, "\tinvokevirtual java/util/Scanner/nextInt()I\n");
+            writeline( tmp );
+        }
+        else if( rhs->pType->type == REAL_t ) {
+            sprintf( tmp, "\tinvokevirtual java/util/Scanner/nextFloat()F\n");
+            writeline( tmp );
+        }
+    }
+
+    if( (ptr = getLocalDecl( table, rhs->varRef->id, scope )) != NULL ) {
+        if( ptr->category == STRING_t ) {
+        }
+        else if( ptr->type->type == INTEGER_t ) {
+            sprintf( tmp, "\tistore %d\n", ptr->local_num);
+        }
+        else if( ptr->type->type == REAL_t ) {
+            sprintf( tmp, "\tfstore %d\n", ptr->local_num);
+        }
+        else if( ptr->type->type == BOOLEAN_t ) {
+            sprintf( tmp, "\tistore %d\n", ptr->local_num);
+        }
+        writeline( tmp );
+    }
+
+}
+
+void neg_codegen( struct expr_sem *ptr ) {
+    char tmp[100];
+    if( ptr->pType->type == REAL_t ) {
+        sprintf( tmp, "\tfneg\n" );
+    }
+    else {
+        sprintf( tmp, "\tineg\n" );
+    }
+
     writeline( tmp );
 }
