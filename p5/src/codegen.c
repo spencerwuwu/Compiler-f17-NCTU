@@ -267,7 +267,7 @@ void var_codegen( struct SymTable *table, struct expr_sem *op1, int scope ) {
         }
         else if( op1->pType->type == REAL_t ) {
 
-                sprintf( tmp, "\tldc %f\n", op1->const_value->value);
+                sprintf( tmp, "\tldc %f\n", op1->const_value->value.realVal);
             writeline( tmp );
         }
         else if( op1->pType->type == BOOLEAN_t ) {

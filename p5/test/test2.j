@@ -17,9 +17,9 @@
 	putstatic test2/_sc Ljava/util/Scanner;
 	ldc 3
 	istore 1
-	ldc 0.000000
+	ldc 1.230000
 	fstore 6
-	ldc 0.000000
+	ldc 1.230000
 	ldc 3
 	i2f
 	fmul
@@ -31,7 +31,7 @@
 	ldc "\n"
 	invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V
 	ldc 3
-	ldc 0.000000
+	ldc 1.230000
 	fstore 7
 	i2f
 	fload 7
@@ -64,7 +64,7 @@ i2f
 	getstatic java/lang/System/out Ljava/io/PrintStream;
 	ldc "\n"
 	invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V
-	ldc 0.000000
+	ldc 1.230000
 	ldc 3
 	i2f
 	fsub
@@ -79,7 +79,7 @@ i2f
 	ldc 100
 	ldc 20
 	iadd
-	ldc 0.000000
+	ldc 3.140000
 	fstore 7
 	i2f
 	fload 7

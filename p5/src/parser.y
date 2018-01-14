@@ -693,8 +693,6 @@ factor			: var_ref
 				$$->beginningOp = NONE_t;
 			  }
 			  $$->const_value = $1;
-              printf("gg %f\n", $1->value);
-            printf("gg %f\n",  $$->const_value->value);
 			  var_codegen( symbolTable, $$, scope );
 			}
 			;
