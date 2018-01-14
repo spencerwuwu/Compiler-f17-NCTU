@@ -21,7 +21,7 @@
 	istore 6
 	ldc 1234567
 	istore 1
-	ldc 0.000000
+	ldc 2.860000
 	fstore 7
 	getstatic java/lang/System/out Ljava/io/PrintStream;
 	iload 1
@@ -31,7 +31,7 @@
 	invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V
 	getstatic java/lang/System/out Ljava/io/PrintStream;
 	iload 6
-	invokevirtual java/io/PrintStream/print(I)V
+	invokevirtual java/io/PrintStream/print(Z)V
 	getstatic java/lang/System/out Ljava/io/PrintStream;
 	ldc "\n"
 	invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V

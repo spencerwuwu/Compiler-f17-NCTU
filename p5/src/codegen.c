@@ -540,8 +540,12 @@ void print_codegen( struct SymTable *table, struct expr_sem *rhs, int scope ) {
             sprintf( tmp, "\tinvokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");
             writeline( tmp );
         }
-        else if( ptr->type->type == INTEGER_t || ptr->type->type == BOOLEAN_t ) {
+        else if( ptr->type->type == INTEGER_t ) {
             sprintf( tmp, "\tinvokevirtual java/io/PrintStream/print(I)V\n");
+            writeline( tmp );
+        }
+        else if( ptr->type->type == BOOLEAN_t ) {
+            sprintf( tmp, "\tinvokevirtual java/io/PrintStream/print(Z)V\n");
             writeline( tmp );
         }
         else if( ptr->type->type == REAL_t ) {
