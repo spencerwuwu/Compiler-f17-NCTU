@@ -5,6 +5,9 @@
 .method public static fun()V
 	.limit stack 100
 	.limit locals 100
+	getstatic java/lang/System/out Ljava/io/PrintStream;
+	ldc "gg\n"
+	invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V
 	return
 	nop
 .end method
@@ -45,6 +48,7 @@
 	invokestatic test5/fun3(II)I
 	ineg
 	invokevirtual java/io/PrintStream/print(I)V
+	invokestatic test5/fun()V
 	getstatic java/lang/System/out Ljava/io/PrintStream;
 	ldc "\n"
 	invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V

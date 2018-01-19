@@ -419,6 +419,7 @@ simple_stmt		: var_ref OP_ASSIGN boolean_expr MK_SEMICOLON
 proc_call_stmt		: ID MK_LPAREN opt_boolean_expr_list MK_RPAREN MK_SEMICOLON
 			{
 			  verifyFuncInvoke( $1, $3, symbolTable, scope );
+			  function_call_codegen( $1, $3, symbolTable, scope );
 			}
 			;
 
@@ -434,6 +435,7 @@ IF_halfer	: IF_header
 			  opt_stmt_list
 		  {
 			if_ending_codegen( labelTable );
+			else_codegen( labelTable );
 		  }
 		  ;
 
@@ -452,14 +454,9 @@ IF_		: IF
 		  }
 		;
 
-IF_else	:	ELSE_
+IF_else	:	ELSE
 			opt_stmt_list
 		|
-		;
-ELSE_	:	ELSE
-	  	{
-			else_codegen( labelTable );
-		}
 		;
 
 condition		: boolean_expr { verifyBooleanExpr( $1, "if" ); } 
@@ -470,6 +467,7 @@ while_stmt		: while_halfer
 			  END DO
 			  {
 				while_ending_codegen( labelTable );
+			    removeLabel( labelTable );
 			  }
 			;
 

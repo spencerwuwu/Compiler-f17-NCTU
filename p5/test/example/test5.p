@@ -1,11 +1,11 @@
 //&P-
-//&D-
 //&T-
 
 test5;
 
 fun();
 begin
+        print "gg\n";
 end
 end fun
 
@@ -24,6 +24,8 @@ end fun3
 begin
 
         print -fun3(1*3,201/17);
+
+        fun();
 
         print "\n";
         print -fun2();

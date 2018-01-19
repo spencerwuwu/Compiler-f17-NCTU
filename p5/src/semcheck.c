@@ -587,7 +587,7 @@ void verifyArithmeticOp(struct expr_sem *op1, OPERATOR operator, struct expr_sem
         {
             op1->pType->type = INTEGER_t;
         }
-        else
+        else if (op1->pType->type == INTEGER_t && op2->pType->type == REAL_t)
         {
             op1->pType->type = REAL_t;
             i2f_flag = __TRUE;

@@ -406,7 +406,7 @@ void function_call_codegen(const char *id, struct expr_sem *exprList, struct Sym
             strcat( tmp, "Z\n" );
             break;
         case VOID_t:
-            strcat( tmp, "\n" );
+            strcat( tmp, "V\n" );
             break;
     }
     writeline( tmp );
@@ -714,6 +714,7 @@ void rel_op_codegen( struct SymTable *table, struct expr_sem *op1, struct expr_s
         writeline( tmp );
         sprintf( tmp, "\tfload %d\n", num);
         writeline( tmp );
+        i2f_flag = __FALSE;
         i2f_ed = __TRUE;
     }
 
@@ -761,7 +762,7 @@ void int_codegen( int value ) {
 
 void for_heading_codegen( struct LabelTable *table, char *id, int lo, int hi, struct SymTable *stable ) {
     char tmp[300];
-    char *start_l = getTrueLabel(table);
+    char *start_l = getStartLabel(table);
     char *true_l = getTrueLabel(table);
     char *false_l = getFalseLabel(table);
     char *exit_l = getExitLabel(table);
@@ -775,7 +776,7 @@ void for_heading_codegen( struct LabelTable *table, char *id, int lo, int hi, st
     writeline( tmp );
     int_codegen( hi );
 
-    sprintf( tmp, "\tisub\n\tifle %s\n\ticonst_0\n\tgoto %s\n%s:\n\ticonst_1\n%s:\n\tifeq %s\n", start_l, false_l, true_l, false_l, exit_l );
+    sprintf( tmp, "\tisub\n\tifle %s\n\ticonst_0\n\tgoto %s\n%s:\n\ticonst_1\n%s:\n\tifeq %s\n", true_l, false_l, true_l, false_l, exit_l );
     writeline( tmp );
 }
 
@@ -785,7 +786,7 @@ void for_ending_codegen( struct LabelTable *table, char *id, struct SymTable *st
     char *exit_l = getExitLabel(table);
     int num = lookupLoopVar( stable, id )->local_num;
 
-    sprintf( tmp, "\tiload %d\n\tsipush 1\n\tiadd\n\tistore %d\n\tgoto %s\n%s:\n", num, num, start_l, exit_l );
+    sprintf( tmp, "\tiload %d\n\tsipush 1\n\tiadd\n\tistore %d\n\tgoto %s\n", num, num, start_l );
     writeline( tmp );
 }
 
@@ -795,7 +796,7 @@ void while_ending_codegen( struct LabelTable *table ) {
     char *else_l = getElseLabel(table);
     char *exit_l = getExitLabel(table);
 
-    sprintf( tmp, "\tgoto %s\n%s:\n%s:\n", start_l, else_l, exit_l );
+    sprintf( tmp, "\tgoto %s\n%s:\n", start_l, else_l );
     writeline( tmp );
 }
 
